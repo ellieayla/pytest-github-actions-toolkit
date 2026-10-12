@@ -119,10 +119,7 @@ def write_raw_git_repo_fixture(into: Path) -> None:
     tree = b'tree 37\x00100644 README.md\x00v\xcb\xf7\x87\x8c6H\x8aOYhK\xb5\xec\xb6@\x9d\x80"('
     write_bytes(into / "objects/ce/6cb4c746b5dea5b059c5d69c4f24d08c550f8d", zlib.compress(tree))
 
-    commit = (
-        b"commit 163\x00tree ce6cb4c746b5dea5b059c5d69c4f24d08c550f8d\n"
-        b"author pytest <pytest@localhost> 631152000 +0000\ncommitter pytest <pytest@localhost> 631152000 +0000\n\nInitial commit\n"
-    )
+    commit = b"commit 163\x00tree ce6cb4c746b5dea5b059c5d69c4f24d08c550f8d\nauthor pytest <pytest@localhost> 631152000 +0000\ncommitter pytest <pytest@localhost> 631152000 +0000\n\nInitial commit\n"
     write_bytes(into / "objects/d7/c2169cd2af356a325633261afe5cc6237059a5", zlib.compress(commit))
 
     (into / "refs").mkdir()

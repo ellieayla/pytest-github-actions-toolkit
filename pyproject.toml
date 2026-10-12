@@ -69,7 +69,7 @@ fixable = [
 
 
 [tool.ruff.lint.pycodestyle]
-max-line-length = 150
+max-line-length = 200
 max-doc-length = 300  # really long comments are OK
 
 [tool.ruff.lint.per-file-ignores]
@@ -81,7 +81,9 @@ max-doc-length = 300  # really long comments are OK
     "PIE790",  # allow unnecessary ... in tests
     "F841",  # allow unnecessary variable assignment in tests?
 ]
-
+"hack/*.py" = [
+    "INP001",  # hack/ is not a namespace package, it's utilities.
+]
 
 # Testing
 [tool.pytest.ini_options]
