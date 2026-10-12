@@ -1,9 +1,9 @@
 [project]
 name = "pytest-github-actions-toolkit"
-version = "0.1.0"
-description = "plugin for pytest providing fixtures for testing github actions build with python. Handles mocking of github-specific environment variables and files."
+dynamic = ["version"]
+description = "plugin for pytest providing fixtures for testing github actions built with python. Handles mocking of github-specific environment variables and files."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12"  # PYVERSIONS
 dependencies = []
 
 [build-system]
@@ -120,6 +120,11 @@ delay = 0.2
 runner = ".venv/bin/pytest"
 patterns = ["*.py"]
 ignore_patterns = []
+
+[tool.uv.workspace]
+members = [
+    "foo",
+]
 
 [dependency-groups]
 dev = [

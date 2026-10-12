@@ -419,7 +419,6 @@ wheels = [
 
 [[package]]
 name = "pytest-github-actions-toolkit"
-version = "0.1.0"
 source = { editable = "." }
 
 [package.dev-dependencies]
