@@ -29,4 +29,4 @@ jobs:
 
     - name: pytest  # also runs mypy
       run: |
-        uv run --no-sync pytest --python ${{ matrix.python-version }}
+        uv run --python ${{ matrix.python-version }} --no-sync pytest
