@@ -1,0 +1,129 @@
+[project]
+name = "pytest-github-actions-toolkit"
+version = "0.1.0"
+description = "plugin for pytest providing fixtures for testing github actions build with python. Handles mocking of github-specific environment variables and files."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools >= 42.0.0", "setuptools-scm >= 9.2" ]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.entry-points.pytest11]
+pytest_github_actions_toolkit = "pytest_github_actions_toolkit.plugin"
+
+
+# Linting
+
+[tool.mypy]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_unreachable = true
+show_error_codes = true
+warn_return_any = true
+disallow_untyped_defs = true
+pretty = true
+color_output = true
+
+files = "src,tests"
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = [
+    "I",  # import sort
+    "COM",  # commas
+    "C4",  # comrehensions instead of unnecessary classes
+    "EXE",  # shabangs
+    "W", "E",  # pycodestyle
+    "F",  # pyflakes
+    "LOG",  # flake8-logging
+    "G",  # flake8-logging-format
+    "INP",  # no implicit namespace packages
+    "PIE",  # flake8-pie
+    "S",  # flake8-bandit
+    "UP",  # pyupgrade
+    "Q000",  # perfer double quotes
+    "RUF100",  # warn on unused ruff noqa
+]
+ignore = [
+    "D203",  # don't require a blank line between classes and docstrings. Use D211 instead.
+    "D212",  # don't require docstrings to look like """text. Use D213 instead, with text on next line.
+    "D104",  # don't require docstrings on package' __init__.py files
+    "D105",  # don't require docstrings on __magic_dunder_methods__
+    "G004",  # f-strings in logging
+    "COM812",  # missing-trailing-comma is already enforced by ruff format
+]
+fixable = [
+    "I",  # import sort
+    "F401",  # unused imports
+    "W293",  # blank line contains whitespace
+    "D204",  # one blank line after class docstring
+    "Q",  # quotes
+]
+
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 150
+max-doc-length = 300  # really long comments are OK
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/test_*.py" = [
+    # "E501",  # allow long lines
+    "T201",  # allow print() in tests
+    "D",  # turn off docstring requirements on testcases
+    "S101",  # allow use of assert in tests
+    "PIE790",  # allow unnecessary ... in tests
+    "F841",  # allow unnecessary variable assignment in tests?
+]
+
+
+# Testing
+[tool.pytest.ini_options]
+pytester_example_dir = "tests/examples"
+addopts = "--cov --no-cov-on-fail"
+filterwarnings = [
+    "error",  # by default convert warnings into exceptions
+]
+
+[tool.coverage.run]
+relative_files = true
+omit = [
+    ".vscode/extensions/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "pytest.fail",
+]
+
+
+# uv tool run pytest-watcher .
+# uv --offline tool run pytest-watcher . -- -v
+# uv --offline tool run pytest-watcher . -- -v --cov-report=term:skip-covered --cov-report xml:coverage.xml
+
+# note: coverage.xml will be read by coverage-gutters' default config
+
+[tool.pytest-watcher]
+now = true
+clear = true
+notify_on_failure = false
+delay = 0.2
+runner = ".venv/bin/pytest"
+patterns = ["*.py"]
+ignore_patterns = []
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]

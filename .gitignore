@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+.*_cache/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# build artifacts
+build/
+dist/
+
+.coverage
+coverage.xml
+pytest-report.xml
+
+.DS_Store
