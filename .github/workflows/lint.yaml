@@ -1,0 +1,17 @@
+name: Tests
+
+on:
+  # test in isolation
+  push:
+  # test as-merged
+  pull_request:
+
+jobs:
+  lint-ruff:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: astral-sh/ruff-action@v4.1.0  # check by default

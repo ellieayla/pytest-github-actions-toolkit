@@ -1,0 +1,108 @@
+name: "publish"
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+
+  build:
+    name: "Build wheel"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: build
+        run: uv build --wheel
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/
+          name: python-package-distributions
+          if-no-files-found: error
+
+  smoketest:
+    name: "Smoketest package installation from wheel"
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14", "3.15"]  # PYVERSIONS
+
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          activate-environment: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Sample app
+        run: |
+          uv init
+          uv venv
+
+      - name: Install the package from wheel
+        run: uv pip install dist/*.whl
+
+
+  pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    needs: [build, smoketest]
+
+    environment:
+      name: PyPI
+
+    permissions:
+      id-token: write  # for OIDC auth, Trusted Publishing to PyPI
+      attestations: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+
+  github-release:
+    name: Make github release
+    runs-on: ubuntu-latest
+    needs: [build, smoketest, pypi-publish]
+
+    permissions:
+      actions: write
+      contents: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          tag: ${{ github.ref_name }}
+        run:
+          gh release create "$tag" --verify-tag --generate-notes --fail-on-no-commits -- dist/*

@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 from textwrap import dedent
 
-from pytest_github_actions_toolkit.environment_variables import Directory, OwnerRepo
+from pytest_github_actions_toolkit.types import Directory, OwnerRepo
 
 variable_url = "https://docs.github.com/api/article/body?pathname=/en/actions/reference/workflows-and-actions/variables"
 

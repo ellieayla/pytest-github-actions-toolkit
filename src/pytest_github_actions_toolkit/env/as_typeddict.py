@@ -4,7 +4,7 @@ from pathlib import Path
 from types import NoneType
 from typing import Annotated, TypedDict, get_args, get_type_hints
 
-from ..environment_variables import Description, Directory, Example, OwnerRepo
+from ..types import Description, Directory, Example, OwnerRepo
 from ..util import truthy_value
 
 

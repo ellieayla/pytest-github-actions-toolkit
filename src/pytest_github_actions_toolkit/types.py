@@ -1,10 +1,10 @@
-import logging
+"""
+foo
+"""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NewType
-
-logger = logging.getLogger(__name__)
-
 
 Actor = NewType("Actor", str)
 Repo = NewType("Repo", str)
