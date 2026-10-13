@@ -99,7 +99,9 @@ omit = [
 ]
 
 [tool.coverage.report]
-show_missing = true
+show_missing = true  # show lines missing coverage
+skip_covered = true  # don't show files in the report at 100%
+skip_empty = true  # skip empty files, like __init__.py
 fail_under = 80
 exclude_also = [
     "if __name__ == .__main__.:",
@@ -109,7 +111,7 @@ exclude_also = [
 
 # uv --offline tool run pytest-watcher . -- -v
 # note: coverage.xml will be read by coverage-gutters' default config
-# Can also produce a terminal report: uv run -m coverage report
+# Can also show as a terminal report: uv run -m coverage report
 [tool.pytest-watcher]
 now = true
 clear = true
