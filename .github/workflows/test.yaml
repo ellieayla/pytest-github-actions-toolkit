@@ -35,3 +35,6 @@ jobs:
       run: |
         uv run --no-sync -m coverage report --format=markdown >> $GITHUB_STEP_SUMMARY
         uv run --no-sync -m coverage report
+
+    - name: Ratchet coverage
+      uses: ellieayla/ratchet-coverage-fail-under@ellieayla-patch-1
