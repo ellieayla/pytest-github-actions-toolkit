@@ -9,8 +9,8 @@ import pytest
 from . import samples
 from .checkout import CheckoutFixture, GitRepo
 from .env.as_typeddict import GithubEnvironmentVariables, names
-from .environment_variables import Directory
 from .raw_git import write_raw_git_repo_fixture
+from .types import Directory
 
 
 @pytest.fixture(autouse=True)

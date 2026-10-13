@@ -24,12 +24,6 @@ def tree(dir_path: Path, length_limit: int | None = 1000, limit_to_directories: 
         plus 1 row of summary if include_summary=True.
 
     Otherwise, row generation continues until traversal is complete.
-
-    If needed for further processing, capture with contextlib.redirect_stdout()
-    >>> ascii = StringIO()
-    >>> with redirect_stdout(ascii):
-    ...    print_tree(dir_path)
-    >>> result = ascii.getvalue()
     """
 
     files = 0

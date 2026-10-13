@@ -6,7 +6,7 @@ from pathlib import Path
 from types import NoneType, UnionType
 from typing import Annotated, Any, ClassVar, Protocol, get_args, get_origin
 
-from ..environment_variables import Description, Directory, Example, OwnerRepo
+from ..types import Description, Directory, Example, OwnerRepo
 from ..util import truthy_value
 
 type _Constructor[T] = Callable[[T], T]

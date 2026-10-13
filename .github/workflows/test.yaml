@@ -25,8 +25,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install the project
-      run: uv sync --locked --all-groups --python ${{ matrix.python-version }}
+      run: uv sync --locked --all-groups
 
-    - name: pytest  # also runs mypy
+    - name: pytest
       run: |
-        uv run --python ${{ matrix.python-version }} --no-sync pytest
+        uv run --no-sync -m coverage run -m pytest -v

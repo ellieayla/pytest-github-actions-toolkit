@@ -52,8 +52,8 @@ jobs:
 
       - name: Sample app
         run: |
-          uv init --python ${{ matrix.python-version }}
-          uv venv --python ${{ matrix.python-version }}
+          uv init
+          uv venv
 
       - name: Install the package from wheel
         run: uv pip install dist/*.whl

@@ -88,7 +88,6 @@ max-doc-length = 300  # really long comments are OK
 # Testing
 [tool.pytest.ini_options]
 pytester_example_dir = "tests/examples"
-addopts = "--cov --no-cov-on-fail"
 filterwarnings = [
     "error",  # by default convert warnings into exceptions
 ]
@@ -105,21 +104,19 @@ fail_under = 80
 exclude_also = [
     "if __name__ == .__main__.:",
     "pytest.fail",
+    'class \w+\(Protocol\):',
 ]
 
-
-# uv tool run pytest-watcher .
 # uv --offline tool run pytest-watcher . -- -v
-# uv --offline tool run pytest-watcher . -- -v --cov-report=term:skip-covered --cov-report xml:coverage.xml
-
 # note: coverage.xml will be read by coverage-gutters' default config
-
+# Can also produce a terminal report: uv run -m coverage report
 [tool.pytest-watcher]
 now = true
 clear = true
 notify_on_failure = false
 delay = 0.2
-runner = ".venv/bin/pytest"
+runner = ".venv/bin/coverage"
+runner_args = ["run", "-m", "pytest"]
 patterns = ["*.py"]
 ignore_patterns = []
 
@@ -130,7 +127,7 @@ members = [
 
 [dependency-groups]
 dev = [
-    "mypy>=2.4.0",
-    "pytest>=9.1.1",
-    "pytest-cov>=7.1.0",
+    "mypy",
+    "pytest",
+    "coverage",
 ]
