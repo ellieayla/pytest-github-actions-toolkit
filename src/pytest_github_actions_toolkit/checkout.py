@@ -1,11 +1,11 @@
 import logging
 import subprocess
-from collections.abc import Generator, Iterator, Mapping, MutableMapping, Sequence
+from collections.abc import Generator, ItemsView, Iterator, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import ItemsView, Self
+from typing import Self
 
 import pytest
 
@@ -34,7 +34,7 @@ class GitCommand:
 
     def run(self, command: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None) -> str:
         logger.info(f"GitCommand: {command}")
-        return subprocess.check_output([str(self.git_bin), *command], text=True, cwd=cwd, env=env)
+        return subprocess.check_output([str(self.git_bin), *command], text=True, cwd=cwd, env=env)  # noqa: S603
 
 
 @dataclass

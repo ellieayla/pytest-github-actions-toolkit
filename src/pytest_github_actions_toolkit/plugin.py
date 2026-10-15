@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from dataclasses import fields
 from pathlib import Path
 from typing import Final, get_type_hints
 from uuid import uuid4
@@ -8,15 +8,15 @@ import pytest
 
 from . import samples
 from .checkout import CheckoutFixture, GitRepo
-from .env.as_typeddict import GithubEnvironmentVariables, names
+from .env.as_dataclass import GithubEnvironmentVariables
 from .raw_git import write_raw_git_repo_fixture
 from .types import Directory
 
 
 @pytest.fixture(autouse=True)
 def clear_standard_github_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in names(GithubEnvironmentVariables):
-        monkeypatch.delenv(key, raising=False)
+    for f in fields(GithubEnvironmentVariables):
+        monkeypatch.delenv(f.name, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -50,11 +50,12 @@ def workflow_paths(github_work_directory: Path) -> Mapping[str, Path | Directory
 
     fields = get_type_hints(GithubEnvironmentVariables)
     for name, typ in fields.items():
-        if typ is Directory:
+        # TODO: Use metadata instead of typehint?
+        if typ is Directory or typ == Directory | None:
             default = f"_temp/{name}"
             allocated[name] = Directory(github_work_directory / pretty_paths_in_workspace.get(name, default))
 
-        elif typ is Path:
+        elif typ is Path or typ == Path | None:
             # create a new file inside the worktree
             default = f"_temp/_runner_file_commands/{name.lower()}_{uuid4()!s}.txt"
             allocated[name] = github_work_directory / pretty_paths_in_workspace.get(name, default)
@@ -117,26 +118,10 @@ def checkout_repository(workspace_directory: Path) -> CheckoutFixture:
 @pytest.fixture
 def sample_remote_repo(tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> GitRepo:
     """A git repository in a local temp directory which can be cloned and pushed to.
-    Contains one commit (probably d7c2169cd2af356a325633261afe5cc6237059a5)."""
+    Contains one commit (d7c2169cd2af356a325633261afe5cc6237059a5)."""
     bare_repo = tmp_path / "__remote_repo"
 
     write_raw_git_repo_fixture(bare_repo)
 
     repo = GitRepo(bare_repo)
-    return repo
-
-    bare_repo_worktree = tmp_path / "__remote_repo_worktree"
-
-    with repo.worktree("main", bare_repo_worktree) as worktree:
-        readme = bare_repo_worktree / "README.md"
-        assert not readme.exists()
-
-        readme.write_text("Example remote repo")
-
-        worktree.config["user.name"] = "pytest"
-        worktree.config["user.email"] = "pytest@localhost"
-        worktree.add(["README.md"])
-        PAST = datetime(1990, 1, 1, 0, 0, 0, 0, UTC)
-        worktree.commit("Initial commit", date=PAST, commit_date=PAST)
-
     return repo

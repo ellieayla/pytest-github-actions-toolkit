@@ -2,9 +2,9 @@
 
 from typing import Final
 
-from .env.as_typeddict import examples
+from .env.as_dataclass import GithubEnvironmentVariables
 
-example_fields = examples()
+example_fields = GithubEnvironmentVariables.examples()
 
 OWNER_NAME: Final[str] = "octocat"
 REPO_NAME: Final[str] = "repo"
