@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import fields
 from pathlib import Path
 from typing import Final, get_type_hints
 from uuid import uuid4
@@ -7,15 +8,15 @@ import pytest
 
 from . import samples
 from .checkout import CheckoutFixture, GitRepo
-from .env.as_typeddict import GithubEnvironmentVariables, names
+from .env.as_dataclass import GithubEnvironmentVariables
 from .raw_git import write_raw_git_repo_fixture
 from .types import Directory
 
 
 @pytest.fixture(autouse=True)
 def clear_standard_github_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in names(GithubEnvironmentVariables):
-        monkeypatch.delenv(key, raising=False)
+    for f in fields(GithubEnvironmentVariables):
+        monkeypatch.delenv(f.name, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -49,11 +50,12 @@ def workflow_paths(github_work_directory: Path) -> Mapping[str, Path | Directory
 
     fields = get_type_hints(GithubEnvironmentVariables)
     for name, typ in fields.items():
-        if typ is Directory:
+        # TODO: Use metadata instead of typehint?
+        if typ is Directory or typ == Directory | None:
             default = f"_temp/{name}"
             allocated[name] = Directory(github_work_directory / pretty_paths_in_workspace.get(name, default))
 
-        elif typ is Path:
+        elif typ is Path or typ == Path | None:
             # create a new file inside the worktree
             default = f"_temp/_runner_file_commands/{name.lower()}_{uuid4()!s}.txt"
             allocated[name] = github_work_directory / pretty_paths_in_workspace.get(name, default)

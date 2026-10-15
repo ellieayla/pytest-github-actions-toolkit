@@ -64,7 +64,7 @@ class GithubEnvironmentVariables:
         },
     )
     GITHUB_ACTION_PATH: Annotated[
-        Path | None,
+        Directory | None,
         Description(
             "The path where an action is located. This property is only supported in composite actions. You can "
             "use this path to change directories to where the action is located and access other files in that "
@@ -518,7 +518,7 @@ class GithubEnvironmentVariables:
         },
     )
     GITHUB_WORKFLOW: Annotated[
-        Path | None,
+        Directory | None,
         Description(
             "The name of the workflow. If the workflow file doesn't specify a `name`, the value of this variable "
             "is the full path of the workflow file in the repository."
