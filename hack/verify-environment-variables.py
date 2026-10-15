@@ -3,16 +3,21 @@ Check GithubEnvironmentVariablesTD against https://docs.github.com/en/actions/re
 """
 
 import argparse
+import inspect
+import itertools
+import logging
+import re
+from ast import AnnAssign, FunctionDef
+from difflib import unified_diff
 from pathlib import Path
-from textwrap import dedent
+from textwrap import dedent, wrap
+from typing import Any
 
+from pytest_github_actions_toolkit.env import as_dataclass
 from pytest_github_actions_toolkit.types import Directory, OwnerRepo
 
 variable_url = "https://docs.github.com/api/article/body?pathname=/en/actions/reference/workflows-and-actions/variables"
 
-
-import logging
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +86,7 @@ def parse_desc_col(column: str) -> VariableMetadata:
 
     description = FOR_MORE_INFORMATION.sub("", remaining).strip()
 
+    t: type
     if "directory" in description.lower():
         t = Directory
     elif "path" in description:
@@ -172,7 +178,7 @@ def field_to_source(field_name: str, annotation: str):
     return f"{field_name}: {annotation}"
 
 
-def compute_expected_source(v: dict[str, VariableMetadata]):
+def compute_expected_source_of_typed_dict(v: dict[str, VariableMetadata]):
     """
     Compute what the source of GithubEnvironmentVariables should look like, given v.
     """
@@ -235,17 +241,7 @@ def compute_expected_source_enum(v: dict[str, VariableMetadata]) -> str:
 def compute_expected_source_dataclass(v: dict[str, VariableMetadata]) -> str:
     """Compute what the source of GithubEnvironmentVariableNamesDC should look like, given v."""
 
-    e = dedent('''\
-        @dataclass
-        class GithubEnvironmentVariablesDC:
-            """
-            Typed list of variables from https://docs.github.com/en/actions/reference/workflows-and-actions/variables
-            Examples in annotations are all valid for that field, but should not be considered defaults.
-            Whether a given variable is present depends on other context, like whether a workflow is triggered by a pull request.
-            """
-
-    ''')
-    expected: list[str] = e.splitlines()
+    expected: list[str] = [""]
     indent = "    "
 
     for field_name, metadata in v.items():
@@ -258,12 +254,132 @@ def compute_expected_source_dataclass(v: dict[str, VariableMetadata]) -> str:
         else:
             constructor = typ.__name__
 
-        for aa in [f"{typ.__name__} | None,", f"Description({desc!r}),", f"Example({example!r}),", f"ValidateAs({constructor}),"]:
+        for aa in [
+            f"{typ.__name__} | None,",
+            f"Description({f'\n{indent * 2}'.join(repr_long_strings(desc))}),",
+            # f"Example({double_quote_repr(example)}),",
+            # f"ValidateAs({constructor}),"
+        ]:
             expected.append(f"{indent * 2}{aa}")
 
-        expected.append(f"{indent}] = None")
+        expected.append(f"{indent}] = field(")
+        expected.append(f"{indent * 2}default=None,")
+        expected.append(f"{indent * 2}metadata={{")
+        for bb in [
+            f"Metadata.example: {double_quote_repr(example)},",
+            f"Metadata.validate_as: {constructor},",
+        ]:
+            expected.append(f"{indent * 3}{bb}")
+        expected.append(f"{indent * 2}}},")
+        expected.append(f"{indent})")
+
+    expected.append("")
 
     return "\n".join(expected)
+
+
+def double_quote_repr(value: str) -> str:
+    """Produce a repr of a string wrapped in doublequotes.
+    Works by creating a repr with '\0 (singlequote+nul) in it, tricking cpython into using doublequotes.
+    Then strip off the extra characters from the rendered repr.
+    Ref https://mail.python.org/pipermail/python-list/2003-April/221393.html"""
+    return '"' + repr("'\0" + value)[6:]
+
+
+def repr_long_string_candidate(src: str, width: int) -> list[str]:
+
+    indent_more = "    "
+    lines = wrap(src, drop_whitespace=False, width=100)
+
+    output = [
+        "",
+        *[indent_more + double_quote_repr(line) for line in lines],
+        "",
+    ]
+    return output
+
+
+def compute_boxyness(chunk: list[str]) -> float:
+    """How close is the length of the shortest line vs the longest line, ignoring the first and last?"""
+    lengths = [len(line.strip()) for line in chunk[1:-1]]
+    return min(lengths) / max(lengths)
+
+
+def repr_long_strings(src: str) -> list[str]:
+    """
+    Given a long string, make a multiline thing.
+
+    Like "aaaaaa bbbb"
+    becomes
+    ("aaaaaa"
+     "bbbb)
+
+    Caller is responsible for splicing it in with correct indentation.
+    """
+
+    candidates: list[tuple[float | int, list[str]]] = []
+
+    if len(src) < 150:
+        candidates.append((1, [double_quote_repr(src)]))
+
+    for width in (90, 100, 110):
+        candidate = repr_long_string_candidate(src, width=width)
+        boxyness = compute_boxyness(candidate)
+        candidates.append((boxyness, candidate))
+
+    return sorted(candidates, key=lambda x: x[0]).pop()[1]
+
+
+def diff_source(existing_object: type, generated: str) -> bool:
+    existing_source = inspect.getsource(existing_object).splitlines()
+    generated_source = generated.splitlines()
+
+    u = unified_diff(existing_source, generated_source)
+
+    has_diff = False
+    for row in u:
+        print(row)
+        has_diff = True
+
+    return has_diff
+
+
+def extract_keepsake_from_existing_code(existing_object: type) -> tuple[str, str]:
+    """There's a pile of AnnAssign's in the middle of the class body. Remove them. Keep everything on each side."""
+    import ast
+
+    existing_source = inspect.getsource(existing_object)
+
+    # for row, body in enumerate(existing_source.splitlines(), start=1):
+    #    print(f"{row:>5} | {body}")
+
+    tree = ast.parse(existing_source)
+
+    lines_to_remove_set: set[int] = set()
+
+    class IdentifyAnnAssign(ast.NodeVisitor):
+        def visit_AnnAssign(self, node: AnnAssign) -> Any:
+            for line_no in range(node.lineno, node.end_lineno + 1):
+                lines_to_remove_set.add(line_no)
+            return None
+
+        def visit_FunctionDef(self, node: FunctionDef) -> Any:
+            return None
+
+    tree = IdentifyAnnAssign().visit(tree)
+
+    # Now we have a set of line numbers to remove from existing_source. They should be contiguous. Check.
+    lines_to_remove = sorted(lines_to_remove_set)
+
+    if not all(b - a == 1 for a, b in itertools.pairwise(sorted(lines_to_remove))):
+        print([b - a == 1 for a, b in itertools.pairwise(sorted(lines_to_remove))])
+        raise ValueError("Gaps in source, aborting!", lines_to_remove)
+
+    source_lines = existing_source.splitlines()
+
+    prelude = "\n".join(source_lines[: min(lines_to_remove) - 1])
+    postlude = "\n".join(source_lines[max(lines_to_remove) :])
+    return prelude, postlude
 
 
 def main() -> int:
@@ -283,18 +399,25 @@ def main() -> int:
 
     variables: dict[str, VariableMetadata] = parse_markdown(markdown)
 
-    expected = compute_expected_source(variables)
+    x, y = extract_keepsake_from_existing_code(as_dataclass.GithubEnvironmentVariables)
 
-    expected += "\n\n"
+    new_dataclass_source = x + compute_expected_source_dataclass(variables) + y
+    # ensure_compiles(new_dataclass_source)
+    print(new_dataclass_source)
 
-    expected += compute_expected_source_enum(variables)
+    # diff_source(as_dataclass.GithubEnvironmentVariables, new_dataclass_source)
+    return 0
 
-    expected += "\n\n"
-    expected += compute_expected_source_dataclass(variables)
 
-    produced_source = compile(source=expected, filename="<string>", mode="exec")
-
-    print(expected)
+def ensure_compiles(generated: str, context: int = 60):
+    try:
+        _produced_source = compile(source=generated, filename="<string>", mode="exec")
+    except SyntaxError as e:
+        source = generated.splitlines()
+        if e.lineno:
+            for line, body in enumerate(source[e.lineno - context : e.lineno + context], start=e.lineno - context):
+                print(f"{line:>4} | {body}")
+        raise
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, get_type_hints
 from uuid import uuid4
@@ -117,26 +116,10 @@ def checkout_repository(workspace_directory: Path) -> CheckoutFixture:
 @pytest.fixture
 def sample_remote_repo(tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> GitRepo:
     """A git repository in a local temp directory which can be cloned and pushed to.
-    Contains one commit (probably d7c2169cd2af356a325633261afe5cc6237059a5)."""
+    Contains one commit (d7c2169cd2af356a325633261afe5cc6237059a5)."""
     bare_repo = tmp_path / "__remote_repo"
 
     write_raw_git_repo_fixture(bare_repo)
 
     repo = GitRepo(bare_repo)
-    return repo
-
-    bare_repo_worktree = tmp_path / "__remote_repo_worktree"
-
-    with repo.worktree("main", bare_repo_worktree) as worktree:
-        readme = bare_repo_worktree / "README.md"
-        assert not readme.exists()
-
-        readme.write_text("Example remote repo")
-
-        worktree.config["user.name"] = "pytest"
-        worktree.config["user.email"] = "pytest@localhost"
-        worktree.add(["README.md"])
-        PAST = datetime(1990, 1, 1, 0, 0, 0, 0, UTC)
-        worktree.commit("Initial commit", date=PAST, commit_date=PAST)
-
     return repo
