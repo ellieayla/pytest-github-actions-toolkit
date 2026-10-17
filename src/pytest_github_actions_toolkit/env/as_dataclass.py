@@ -6,7 +6,7 @@ from pathlib import Path
 from types import NoneType
 from typing import Annotated, Any, Self
 
-from ..types import Description, Directory, Example, OwnerRepo
+from ..types import Description, Directory, OwnerRepo
 from ..util import truthy_value
 
 type _Constructor[T] = Callable[[str], T]
@@ -35,8 +35,6 @@ class GithubEnvironmentVariables:
     CI: Annotated[
         bool | None,
         Description("You can use this variable to differentiate when tests are being run locally or by GitHub Actions."),
-        Example("true"),
-        ValidateAs(truthy_value),
     ] = field(
         default=None,
         metadata={
@@ -47,15 +45,13 @@ class GithubEnvironmentVariables:
     GITHUB_ACTION: Annotated[
         str | None,
         Description(
-            "The name of the action currently running, or the `id` of a step. <br><br>GitHub removes special "
-            "characters, and uses the name `__run` when the current step runs a script without an `id`. If you "
-            "use the same script or action more than once in the same job, the name will include a suffix that "
-            "consists of the sequence number preceded by an underscore. For example, the first script you run "
-            "will have the name `__run`, and the second script will be named `__run_2`. Similarly, the second "
-            "invocation of `actions/checkout` will be `actionscheckout2`."
+            "The name of the action currently running, or the `id` of a step. GitHub removes special characters, "
+            "and uses the name `__run` when the current step runs a script without an `id`. If you use the same "
+            "script or action more than once in the same job, the name will include a suffix that consists of the"
+            " sequence number preceded by an underscore. For example, the first script you run will have the name"
+            " `__run`, and the second script will be named `__run_2`. Similarly, the second invocation of "
+            "`actions/checkout` will be `actionscheckout2`."
         ),
-        Example("__repo-owner_name-of-action-repo"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -70,20 +66,16 @@ class GithubEnvironmentVariables:
             "use this path to change directories to where the action is located and access other files in that "
             "same repository."
         ),
-        Example("/home/runner/work/_actions/repo-owner/name-of-action-repo/v1"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
             Metadata.example: "/home/runner/work/_actions/repo-owner/name-of-action-repo/v1",
-            Metadata.validate_as: Path,
+            Metadata.validate_as: Directory,
         },
     )
     GITHUB_ACTION_REPOSITORY: Annotated[
         str | None,
         Description("For a step executing an action, this is the owner and repository name of the action."),
-        Example("actions/checkout"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -94,10 +86,9 @@ class GithubEnvironmentVariables:
     GITHUB_ACTIONS: Annotated[
         bool | None,
         Description(
-            "when GitHub Actions is running the workflow. You can use this variable to differentiate when tests are being run locally or by GitHub Actions."
+            "when GitHub Actions is running the workflow. You can use this variable to differentiate when tests "
+            "are being run locally or by GitHub Actions."
         ),
-        Example("true"),
-        ValidateAs(truthy_value),
     ] = field(
         default=None,
         metadata={
@@ -108,8 +99,6 @@ class GithubEnvironmentVariables:
     GITHUB_ACTOR: Annotated[
         str | None,
         Description("The name of the person or app that initiated the workflow."),
-        Example("octocat"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -122,8 +111,6 @@ class GithubEnvironmentVariables:
         Description(
             "The account ID of the person or app that triggered the initial workflow run. Note that this is different from the actor username."
         ),
-        Example("1234567"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -134,8 +121,6 @@ class GithubEnvironmentVariables:
     GITHUB_API_URL: Annotated[
         str | None,
         Description("Returns the API URL."),
-        Example("https://api.github.com"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -149,8 +134,6 @@ class GithubEnvironmentVariables:
             "The path on the runner to the file that declares workflow artifacts for the current step. Write one "
             "declaration per line to identify files or OCI digest references as workflow artifacts."
         ),
-        Example("/home/runner/work/_actions//example.txt"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -163,8 +146,6 @@ class GithubEnvironmentVariables:
         Description(
             "The path on the runner to a read-only file that contains aggregated workflow artifact metadata for the current job as a JSON object."
         ),
-        Example("/home/runner/work/_actions//example.txt"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -178,8 +159,6 @@ class GithubEnvironmentVariables:
             "The name of the base ref or target branch of the pull request in a workflow run. This is only set "
             "when the event that triggers a workflow run is either `pull_request` or `pull_request_target`."
         ),
-        Example("main"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -193,8 +172,6 @@ class GithubEnvironmentVariables:
             "The path on the runner to the file that sets variables from workflow commands. The path to this file"
             " is unique to the current step and changes for each step in a job."
         ),
-        Example("/home/runner/work/_temp/_runner_file_commands/set_env_87406d6e-4979-4d42-98e1-3dab1f48b13a"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -205,8 +182,6 @@ class GithubEnvironmentVariables:
     GITHUB_EVENT_NAME: Annotated[
         str | None,
         Description("The name of the event that triggered the workflow."),
-        Example("workflow_dispatch"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -217,8 +192,6 @@ class GithubEnvironmentVariables:
     GITHUB_EVENT_PATH: Annotated[
         Path | None,
         Description("The path to the file on the runner that contains the full event webhook payload."),
-        Example("/github/workflow/event.json"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -229,8 +202,6 @@ class GithubEnvironmentVariables:
     GITHUB_GRAPHQL_URL: Annotated[
         str | None,
         Description("Returns the GraphQL API URL."),
-        Example("https://api.github.com/graphql"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -244,8 +215,6 @@ class GithubEnvironmentVariables:
             "The head ref or source branch of the pull request in a workflow run. This property is only set when "
             "the event that triggers a workflow run is either `pull_request` or `pull_request_target`."
         ),
-        Example("feature-branch-1"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -256,8 +225,6 @@ class GithubEnvironmentVariables:
     GITHUB_JOB: Annotated[
         str | None,
         Description("The job\\_id of the current job."),
-        Example("greeting_job"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -271,8 +238,6 @@ class GithubEnvironmentVariables:
             "The path on the runner to the file that sets the current step's outputs from workflow commands. The "
             "path to this file is unique to the current step and changes for each step in a job."
         ),
-        Example("/home/runner/work/_temp/_runner_file_commands/set_output_a50ef383-b063-46d9-9157-57953fc9f3f0"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -286,8 +251,6 @@ class GithubEnvironmentVariables:
             "The path on the runner to the file that sets system `PATH` variables from workflow commands. The "
             "path to this file is unique to the current step and changes for each step in a job."
         ),
-        Example("/home/runner/work/_temp/_runner_file_commands/add_path_899b9445-ad4a-400c-aa89-249f18632cf5"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -309,8 +272,6 @@ class GithubEnvironmentVariables:
             "`pull_request_target` events have the `ref` from the base branch. For tags it is "
             "`refs/tags/<tag_name>`."
         ),
-        Example("refs/heads/feature-branch-1"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -322,11 +283,9 @@ class GithubEnvironmentVariables:
         str | None,
         Description(
             "The short ref name of the branch or tag that triggered the workflow run. This value matches the "
-            "branch or tag name shown on GitHub. <br><br>For pull requests that were not merged, the format is "
+            "branch or tag name shown on GitHub. For pull requests that were not merged, the format is "
             "`<pr_number>/merge`."
         ),
-        Example("feature-branch-1"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -337,8 +296,6 @@ class GithubEnvironmentVariables:
     GITHUB_REF_PROTECTED: Annotated[
         bool | None,
         Description("`true` if branch protections or rulesets are configured for the ref that triggered the workflow run."),
-        Example("true"),
-        ValidateAs(truthy_value),
     ] = field(
         default=None,
         metadata={
@@ -349,8 +306,6 @@ class GithubEnvironmentVariables:
     GITHUB_REF_TYPE: Annotated[
         str | None,
         Description("The type of ref that triggered the workflow run. Valid values are `branch` or `tag`."),
-        Example("branch"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -361,8 +316,6 @@ class GithubEnvironmentVariables:
     GITHUB_REPOSITORY: Annotated[
         OwnerRepo | None,
         Description("The owner and repository name."),
-        Example("octocat/Hello-World"),
-        ValidateAs(OwnerRepo),
     ] = field(
         default=None,
         metadata={
@@ -373,8 +326,6 @@ class GithubEnvironmentVariables:
     GITHUB_REPOSITORY_ID: Annotated[
         str | None,
         Description("The ID of the repository. Note that this is different from the repository name."),
-        Example("123456789"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -385,8 +336,6 @@ class GithubEnvironmentVariables:
     GITHUB_REPOSITORY_OWNER: Annotated[
         str | None,
         Description("The repository owner's name."),
-        Example("octocat"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -397,8 +346,6 @@ class GithubEnvironmentVariables:
     GITHUB_REPOSITORY_OWNER_ID: Annotated[
         str | None,
         Description("The repository owner's account ID. Note that this is different from the owner's name."),
-        Example("1234567"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -409,8 +356,6 @@ class GithubEnvironmentVariables:
     GITHUB_RETENTION_DAYS: Annotated[
         int | None,
         Description("The number of days that workflow run logs and artifacts are kept."),
-        Example("90"),
-        ValidateAs(int),
     ] = field(
         default=None,
         metadata={
@@ -424,8 +369,6 @@ class GithubEnvironmentVariables:
             "A unique number for each attempt of a particular workflow run in a repository. This number begins at"
             " 1 for the workflow run's first attempt, and increments with each re-run."
         ),
-        Example("3"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -436,8 +379,6 @@ class GithubEnvironmentVariables:
     GITHUB_RUN_ID: Annotated[
         str | None,
         Description("A unique number for each workflow run within a repository. This number does not change if you re-run the workflow run."),
-        Example("1658821493"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -452,8 +393,6 @@ class GithubEnvironmentVariables:
             "the workflow's first run, and increments with each new run. This number does not change if you re-"
             "run the workflow run."
         ),
-        Example("3"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -464,8 +403,6 @@ class GithubEnvironmentVariables:
     GITHUB_SERVER_URL: Annotated[
         str | None,
         Description("The URL of the GitHub server."),
-        Example("https://github.com"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -476,8 +413,6 @@ class GithubEnvironmentVariables:
     GITHUB_SHA: Annotated[
         str | None,
         Description("The commit SHA that triggered the workflow. The value of this commit SHA depends on the event that triggered the workflow."),
-        Example("ffac537e6cbbf934b08745a378932722df287a53"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -491,8 +426,6 @@ class GithubEnvironmentVariables:
             "The path on the runner to the file that contains job summaries from workflow commands. The path to "
             "this file is unique to the current step and changes for each step in a job."
         ),
-        Example("/home/runner/_layout/_work/_temp/_runner_file_commands/step_summary_1cb22d7f-5663-41a8-9ffc-13472605c76c"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -508,8 +441,6 @@ class GithubEnvironmentVariables:
             "`github.actor`, even if the actor initiating the re-run (`github.triggering_actor`) has different "
             "privileges."
         ),
-        Example("octocat"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -518,13 +449,11 @@ class GithubEnvironmentVariables:
         },
     )
     GITHUB_WORKFLOW: Annotated[
-        Directory | None,
+        Path | None,
         Description(
             "The name of the workflow. If the workflow file doesn't specify a `name`, the value of this variable "
             "is the full path of the workflow file in the repository."
         ),
-        Example("My test workflow"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -535,8 +464,6 @@ class GithubEnvironmentVariables:
     GITHUB_WORKFLOW_REF: Annotated[
         Path | None,
         Description("The ref path to the workflow."),
-        Example("octocat/hello-world/.github/workflows/my-workflow.yml@refs/heads/my_branch"),
-        ValidateAs(Path),
     ] = field(
         default=None,
         metadata={
@@ -547,8 +474,6 @@ class GithubEnvironmentVariables:
     GITHUB_WORKFLOW_SHA: Annotated[
         str | None,
         Description("The commit SHA for the workflow file."),
-        Example("ffac537e6cbbf934b08745a378932722df287a53"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -561,8 +486,6 @@ class GithubEnvironmentVariables:
         Description(
             "The default working directory on the runner for steps, and the default location of your repository when using the `checkout` action."
         ),
-        Example("/home/runner/work/my-repo-name/my-repo-name"),
-        ValidateAs(Directory),
     ] = field(
         default=None,
         metadata={
@@ -573,8 +496,6 @@ class GithubEnvironmentVariables:
     RUNNER_ARCH: Annotated[
         str | None,
         Description("The architecture of the runner executing the job. Possible values are `X86`, `X64`, `ARM`, or `ARM64`."),
-        Example("X86"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -588,8 +509,6 @@ class GithubEnvironmentVariables:
             "This is set only if debug logging is enabled. It can be useful as an indicator to enable additional "
             "debugging or verbose logging in your own job steps."
         ),
-        Example("1"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -604,8 +523,6 @@ class GithubEnvironmentVariables:
             "hosted runners provided by GitHub, and `self-hosted` for self-hosted runners configured by the "
             "repository owner."
         ),
-        Example("github-hosted"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -619,8 +536,6 @@ class GithubEnvironmentVariables:
             "The name of the runner executing the job. This name may not be unique in a workflow run as runners "
             "at the repository and organization levels could use the same name."
         ),
-        Example("Hosted Agent"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -631,8 +546,6 @@ class GithubEnvironmentVariables:
     RUNNER_OS: Annotated[
         str | None,
         Description("The operating system of the runner executing the job. Possible values are `Linux`, `Windows`, or `macOS`."),
-        Example("Windows"),
-        ValidateAs(str),
     ] = field(
         default=None,
         metadata={
@@ -647,8 +560,6 @@ class GithubEnvironmentVariables:
             "of each job. Note that files will not be removed if the runner's user account does not have "
             "permission to delete them."
         ),
-        Example("D:\\a\\_temp"),
-        ValidateAs(Directory),
     ] = field(
         default=None,
         metadata={
@@ -659,8 +570,6 @@ class GithubEnvironmentVariables:
     RUNNER_TOOL_CACHE: Annotated[
         Directory | None,
         Description("The path to the directory containing preinstalled tools for GitHub-hosted runners."),
-        Example("C:\\hostedtoolcache\\windows"),
-        ValidateAs(Directory),
     ] = field(
         default=None,
         metadata={
