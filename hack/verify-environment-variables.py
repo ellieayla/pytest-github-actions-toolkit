@@ -304,12 +304,21 @@ def repr_long_strings(src: str, indent: int) -> list[str]:
     Caller is responsible for splicing it in with correct indentation.
     """
 
+    DESIRED_WIDTH = 150
+    extra_chars_if_one_line = (" " * indent * 2) + "Description()" + "),"
+    extra_chars_if_two_line = " " * indent * 3
+
     candidates: list[tuple[float | int, list[str]]] = []
 
-    if len(src) < 150 - (indent * 3):
-        candidates.append((1, [double_quote_repr(src)]))
+    if len(src + extra_chars_if_one_line) < DESIRED_WIDTH:
+        # candidates.append((2, [double_quote_repr(src)]))
+        return [double_quote_repr(src)]  # just pick it
 
-    for width in (90, 100, 110):
+    if len(src + extra_chars_if_two_line) < DESIRED_WIDTH:
+        # candidates.append((2, [double_quote_repr(src)]))
+        return ["", *indented([double_quote_repr(src)], indent), ""]  # just pick it
+
+    for width in (90, 100, 110, 120, 130, 140):  # try different wrap widths to find the "most boxy" one.
         candidate = repr_long_string_candidate(src, width=width, indent=indent)
         boxyness = compute_boxyness(candidate)
         candidates.append((boxyness, candidate))
@@ -357,6 +366,9 @@ def replace_dataclass_in_source_file(existing_source: str, existing_class_name: 
 
     insert_point = min(lines_to_remove_set)
     new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+
+    if not new_source.endswith("\n"):
+        new_source += "\n"
     return new_source
 
 
@@ -429,6 +441,10 @@ def replace_strenum_in_source_file(existing_source: str, existing_class_name: st
 
     insert_point = min(lines_to_remove_set)
     new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+
+    if not new_source.endswith("\n"):
+        new_source += "\n"
+
     return new_source
 
 
@@ -481,7 +497,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(epilog="Exits with 0 if up-to-date, 1 if changes needed.")
     p.add_argument("mode", nargs="?", choices=Mode, default=Mode.diff, help="Output mode. Default '%(default)s'")
-    p.add_argument("--what", nargs="+", choices=What, default=None, help="What datastructure to update. Default all.")
+    p.add_argument("--what", action="append", choices=What, default=None, help="What datastructure to update. Default all.")
     p.add_argument("--cache")
 
     a = p.parse_args()
