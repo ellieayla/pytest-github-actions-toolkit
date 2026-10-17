@@ -46,7 +46,7 @@ FOR_MORE_INFORMATION = re.compile(r"For more information[^\.]*\.")
 
 PREFIX_FOR_UNSPECIFIED_PATH = "/home/runner/work/_actions/"
 
-FOR_EXAMPLE = re.compile(r"For example[,:]([a-z ]+,)? `(.+?)`(\. *)?")
+FOR_EXAMPLE = re.compile(r"For example[,:]([a-z0-9 ]+,)? `(.+?)`(\. *)?")
 ALWAYS_SET = re.compile(r"Always set to `(.+?)`(\. *)?")
 HAS_THE_VALUE = re.compile(r", and always has the value of `(.+?)`")
 POSSIBLE_VALUES = re.compile(r"values are:? `(.+?)`")
@@ -80,7 +80,7 @@ def parse_desc_col(column: str) -> VariableMetadata:
     elif m := TRUE_IF.search(remaining):
         example = "true"
 
-    elif remaining.startswith("The commit SHA"):
+    elif "commit SHA" in remaining:
         example = "ffac537e6cbbf934b08745a378932722df287a53"
 
     elif remaining.startswith("The username"):
@@ -92,7 +92,9 @@ def parse_desc_col(column: str) -> VariableMetadata:
     description = FOR_MORE_INFORMATION.sub("", remaining).replace(BR, "").strip()
 
     t: type
-    if "directory" in description.lower():
+    if "path where an action is located" in description.lower():
+        t = Directory
+    elif "directory" in description.lower():
         t = Directory
     elif "path" in description:
         t = Path
