@@ -705,4 +705,4 @@ class GithubEnvironmentVariables:
 
     @classmethod
     def examples(cls) -> dict[str, str | None]:
-        return {f.name: f.metadata.get(Metadata.example) for f in fields(cls)}
+        return {f.name: f.metadata.get(Metadata.example) or "" for f in fields(cls)}
