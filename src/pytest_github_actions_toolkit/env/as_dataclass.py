@@ -1,22 +1,12 @@
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import _MISSING_TYPE, MISSING, Field, dataclass, field, fields, is_dataclass
+from dataclasses import Field, dataclass, field, fields, is_dataclass
 from enum import StrEnum, auto
 from pathlib import Path
-from types import NoneType
 from typing import Annotated, Any, Self
 
 from ..types import Description, Directory, OwnerRepo
 from ..util import truthy_value
-
-type _Constructor[T] = Callable[[str], T]
-
-
-@dataclass
-class ValidateAs[T]:
-    """A callback which will construct the needed type."""
-
-    callable: _Constructor[T]
 
 
 class Metadata(StrEnum):
@@ -593,18 +583,15 @@ class GithubEnvironmentVariables:
         if not is_dataclass(cls):
             raise TypeError(f"Must be a dataclass class, got {cls!r}")
 
-        # For every field on the dataclass, read value out of the envs mapping by field name. All values are either strings or field defaults or MISSING.
-        raw_values: Mapping[Field[str], str | _MISSING_TYPE | None] = {
-            f: envs.get(f.name, str(f.default) if f.default not in (MISSING, None) else f.default) for f in fields(cls)
+        # For every field on the dataclass, read value out of the envs mapping by field name. All values are either strings or field default (None).
+        raw_values: Mapping[Field[str], str | None] = {
+            f: envs.get(f.name, str(f.default) if f.default is not None else f.default) for f in fields(cls)
         }
 
-        values_that_are_set: Mapping[Field[str], str] = {
-            f: v
-            for f, v in raw_values.items()
-            if not isinstance(v, (_MISSING_TYPE, NoneType))  # NOTE: Checking the type of v instead of its value to make mypy happy
-        }
+        # Filter out all the None's
+        values_that_are_set: Mapping[Field[str], str] = {f: v for f, v in raw_values.items() if v is not None}
 
-        constructors: Mapping[Field[str], _Constructor[str]] = {f: f.metadata.get(Metadata.validate_as, f.type) for f in values_that_are_set}
+        constructors: Mapping[Field[str], Callable[[str], Any]] = {f: f.metadata.get(Metadata.validate_as, f.type) for f in values_that_are_set}
 
         loaded_values = {f: constructors[f](v) for f, v in values_that_are_set.items()}
 
