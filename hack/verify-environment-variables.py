@@ -1,20 +1,25 @@
 """
-Check GithubEnvironmentVariablesTD against https://docs.github.com/en/actions/reference/workflows-and-actions/variables
+Code generation. Produce a dataclass and a StrEnum based on environment variables names and example values in documentation.
 """
 
 import argparse
+import ast
 import inspect
-import itertools
 import logging
 import re
-from ast import AnnAssign, FunctionDef
+import sys
+from ast import AnnAssign, Assign, ClassDef
+from collections.abc import Iterable
 from difflib import unified_diff
+from enum import StrEnum
+from itertools import chain
 from pathlib import Path
-from textwrap import dedent, wrap
-from typing import Any
+from textwrap import wrap
+from typing import Literal, Never
 
-from pytest_github_actions_toolkit.env import as_dataclass
-from pytest_github_actions_toolkit.types import Directory, OwnerRepo
+from pytest_github_actions_toolkit.env import Name, as_dataclass
+from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo
+from pytest_github_actions_toolkit.util import truthy_value
 
 variable_url = "https://docs.github.com/api/article/body?pathname=/en/actions/reference/workflows-and-actions/variables"
 
@@ -46,7 +51,7 @@ ALWAYS_SET = re.compile(r"Always set to `(.+?)`(\. *)?")
 HAS_THE_VALUE = re.compile(r", and always has the value of `(.+?)`")
 POSSIBLE_VALUES = re.compile(r"values are:? `(.+?)`")
 TRUE_IF = re.compile(r"`true` if ")
-
+BR = "<br>"
 
 type VariableMetadata = tuple[str, str, type]
 
@@ -84,7 +89,7 @@ def parse_desc_col(column: str) -> VariableMetadata:
     else:
         example = None
 
-    description = FOR_MORE_INFORMATION.sub("", remaining).strip()
+    description = FOR_MORE_INFORMATION.sub("", remaining).replace(BR, "").strip()
 
     t: type
     if "directory" in description.lower():
@@ -178,102 +183,83 @@ def field_to_source(field_name: str, annotation: str):
     return f"{field_name}: {annotation}"
 
 
-def compute_expected_source_of_typed_dict(v: dict[str, VariableMetadata]):
-    """
-    Compute what the source of GithubEnvironmentVariables should look like, given v.
-    """
-    # first few lines
-    # source = inspect.getsource(GithubEnvironmentVariables)
-    source = dedent('''\
-        class GithubEnvironmentVariables(TypedDict, total=False):
-            """
-            Typed list of variables from https://docs.github.com/en/actions/reference/workflows-and-actions/variables
-            Examples in annotations are all valid for that field, but should not be considered defaults.
-            Whether a given variable is present depends on other context, like whether a workflow is triggered by a pull request.
-            """
-
-    ''')
-    expected: list[str] = source.splitlines()
-
-    indent = "    "
-    if not expected[2].startswith(indent):
-        raise IndentationError()
-
-    for field_name, metadata in v.items():
-        desc, example, typ = metadata
-
-        expected.append(f"{indent}{field_name}: Annotated[")
-
-        for aa in [
-            f"{typ.__name__},",
-            f"Description({desc!r}),",
-            f"Example({example!r}),",
-        ]:
-            expected.append(f"{indent * 2}{aa}")
-
-        expected.append(f"{indent}]")
+def compute_expected_source_enum(v: dict[str, VariableMetadata], indent: int) -> str:
+    """Compute what the source of env.Name should look like, given v."""
+    expected: list[str] = [
+        "",
+        *indented([f"{field_name} = {double_quote_repr(field_name)}" for field_name in v], indent),
+        "",
+    ]
 
     return "\n".join(expected)
 
 
-def compute_expected_source_enum(v: dict[str, VariableMetadata]) -> str:
-    """Compute what the source of GithubEnvironmentVariableNames should look like, given v."""
-    # source = inspect.getsource(GithubEnvironmentVariableNames)
-    source = dedent('''\
-        class GithubEnvironmentVariableNames(StrEnum):
-            """
-            Names of standard github environment variables from https://docs.github.com/en/actions/reference/workflows-and-actions/variables.
-            Matches keys of GithubEnvironmentVariables.
-            """
-
-    ''')
-    expected: list[str] = source.splitlines()
-    indent = "    "
-    if not expected[2].startswith(indent):
-        raise IndentationError()
-
-    for field_name in v:
-        expected.append(f"{indent}{field_name} = {field_name!r}")
-
-    return "\n".join(expected)
+def indented(src: Iterable[str], indent: int) -> list[str]:
+    """Return the same list of strings, but with 'indent' qty spaces on the front of each string."""
+    return [(" " * indent + row) for row in src]
 
 
-def compute_expected_source_dataclass(v: dict[str, VariableMetadata]) -> str:
-    """Compute what the source of GithubEnvironmentVariableNamesDC should look like, given v."""
+def annotated_arg(desc: str, typ: type, indent: int) -> list[str]:
+    """Construct lines of an Annotated[] attribute list. Caller is responsible for joining and indenting them."""
 
-    expected: list[str] = [""]
-    indent = "    "
+    description = "\n".join(repr_long_strings(desc, indent))
 
-    for field_name, metadata in v.items():
-        desc, example, typ = metadata
+    return [f"{typ.__name__} | None,", *f"{Description.__name__}({description}),".splitlines()]
 
-        expected.append(f"{indent}{field_name}: Annotated[")
 
-        if typ is bool:
-            constructor = "truthy_value"
-        else:
-            constructor = typ.__name__
+def field_arg(constructor: str, example: str, indent: int):
+    """Construct lines of a field() constructor's arguments. Caller is responsible for joining and indenting them."""
+    MetadataKeysEnum = as_dataclass.Metadata
 
-        for aa in [
-            f"{typ.__name__} | None,",
-            f"Description({f'\n{indent * 2}'.join(repr_long_strings(desc))}),",
-            # f"Example({double_quote_repr(example)}),",
-            # f"ValidateAs({constructor}),"
-        ]:
-            expected.append(f"{indent * 2}{aa}")
+    if len(example) > 110:
+        raise ValueError(f"Unexpectedly long example. Need to consider wrapping it like Description (len={len(example)}): {example!r}")
+    field_metadata_lines = [
+        f"{MetadataKeysEnum.__name__}.{MetadataKeysEnum.example.name}: {double_quote_repr(example)},",
+        f"{MetadataKeysEnum.__name__}.{MetadataKeysEnum.validate_as.name}: {constructor},",
+    ]
 
-        expected.append(f"{indent}] = field(")
-        expected.append(f"{indent * 2}default=None,")
-        expected.append(f"{indent * 2}metadata={{")
-        for bb in [
-            f"Metadata.example: {double_quote_repr(example)},",
-            f"Metadata.validate_as: {constructor},",
-        ]:
-            expected.append(f"{indent * 3}{bb}")
-        expected.append(f"{indent * 2}}},")
-        expected.append(f"{indent})")
+    return [
+        "default=None,",
+        "metadata={",
+        *indented(field_metadata_lines, indent),
+        "},",
+    ]
 
-    expected.append("")
+
+def class_attribute(name: str, meta: VariableMetadata, indent: int) -> list[str]:
+    """Construct lines of one class attribute. Caller is responsible for joining and indenting them.
+
+    foo = Annotated[
+        ...
+    ] = field(
+        ...
+    )
+    """
+    desc, example, typ = meta
+
+    if typ is bool:
+        constructor = truthy_value.__name__
+    else:
+        constructor = typ.__name__
+
+    return [
+        f"{name}: Annotated[",
+        *indented(annotated_arg(desc, typ, indent), indent),
+        "] = field(",
+        *indented(field_arg(constructor, example, indent), indent),
+        ")",
+    ]
+
+
+def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: int) -> str:
+    """Compute what the source of GithubEnvironmentVariables should look like, given v.
+    Indent it to match the parent class body."""
+
+    expected: list[str] = [
+        "",
+        *indented(chain.from_iterable(class_attribute(field_name, metadata, indent) for field_name, metadata in v.items()), indent),
+        "",
+    ]
 
     return "\n".join(expected)
 
@@ -286,17 +272,15 @@ def double_quote_repr(value: str) -> str:
     return '"' + repr("'\0" + value)[6:]
 
 
-def repr_long_string_candidate(src: str, width: int) -> list[str]:
-
-    indent_more = "    "
+def repr_long_string_candidate(src: str, width: int, indent: int) -> list[str]:
+    """Create a stack of strings wrapped in doublequotes."""
     lines = wrap(src, drop_whitespace=False, width=100)
 
-    output = [
+    return [
         "",
-        *[indent_more + double_quote_repr(line) for line in lines],
+        *indented(map(double_quote_repr, lines), indent=indent),
         "",
     ]
-    return output
 
 
 def compute_boxyness(chunk: list[str]) -> float:
@@ -305,108 +289,222 @@ def compute_boxyness(chunk: list[str]) -> float:
     return min(lengths) / max(lengths)
 
 
-def repr_long_strings(src: str) -> list[str]:
+def repr_long_strings(src: str, indent: int) -> list[str]:
     """
     Given a long string, make a multiline thing.
 
-    Like "aaaaaa bbbb"
-    becomes
-    ("aaaaaa"
-     "bbbb)
+    Like: ("aaaaaa bbbb")
+    becomes: (
+        "aaaaaa"
+        "bbbb"
+    )
 
     Caller is responsible for splicing it in with correct indentation.
     """
 
     candidates: list[tuple[float | int, list[str]]] = []
 
-    if len(src) < 150:
+    if len(src) < 150 - (indent * 3):
         candidates.append((1, [double_quote_repr(src)]))
 
     for width in (90, 100, 110):
-        candidate = repr_long_string_candidate(src, width=width)
+        candidate = repr_long_string_candidate(src, width=width, indent=indent)
         boxyness = compute_boxyness(candidate)
         candidates.append((boxyness, candidate))
 
-    return sorted(candidates, key=lambda x: x[0]).pop()[1]
+    return sorted(candidates, key=lambda x: x[0]).pop()[1]  # idx=1 is the body, idx=0 is the score
 
 
-def diff_source(existing_object: type, generated: str) -> bool:
-    existing_source = inspect.getsource(existing_object).splitlines()
-    generated_source = generated.splitlines()
-
-    u = unified_diff(existing_source, generated_source)
-
-    has_diff = False
-    for row in u:
-        print(row)
-        has_diff = True
-
-    return has_diff
+def print_source_pretty(source: str, start: int = 1) -> None:
+    for idx, row in enumerate(source.splitlines(), start=start):
+        print(f"{idx:>5} | {row}")
 
 
-def extract_keepsake_from_existing_code(existing_object: type) -> tuple[str, str]:
+def replace_dataclass_in_source_file(existing_source: str, existing_class_name: str, new_variables: dict[str, VariableMetadata]) -> str:
     """There's a pile of AnnAssign's in the middle of the class body. Remove them. Keep everything on each side."""
-    import ast
-
-    existing_source = inspect.getsource(existing_object)
-
-    # for row, body in enumerate(existing_source.splitlines(), start=1):
-    #    print(f"{row:>5} | {body}")
 
     tree = ast.parse(existing_source)
+    body_indentation: int = 4  # default, let it be over-ridden if there's other contents
+    found_class: ClassDef | None = None
 
-    lines_to_remove_set: set[int] = set()
-
-    class IdentifyAnnAssign(ast.NodeVisitor):
-        def visit_AnnAssign(self, node: AnnAssign) -> Any:
-            for line_no in range(node.lineno, node.end_lineno + 1):
-                lines_to_remove_set.add(line_no)
-            return None
-
-        def visit_FunctionDef(self, node: FunctionDef) -> Any:
-            return None
-
-    tree = IdentifyAnnAssign().visit(tree)
-
-    # Now we have a set of line numbers to remove from existing_source. They should be contiguous. Check.
-    lines_to_remove = sorted(lines_to_remove_set)
-
-    if not all(b - a == 1 for a, b in itertools.pairwise(sorted(lines_to_remove))):
-        print([b - a == 1 for a, b in itertools.pairwise(sorted(lines_to_remove))])
-        raise ValueError("Gaps in source, aborting!", lines_to_remove)
+    for node in tree.body:
+        if isinstance(node, ClassDef) and node.name == existing_class_name:
+            found_class = node
+            break
+    else:
+        raise SyntaxError("Didn't find a ClassDef at all!.")
 
     source_lines = existing_source.splitlines()
+    lines_to_remove_set: set[int] = set()
 
-    prelude = "\n".join(source_lines[: min(lines_to_remove) - 1])
-    postlude = "\n".join(source_lines[max(lines_to_remove) :])
-    return prelude, postlude
+    # Make a list of all lines comprising the Annotated assignment at the class body.
+    for node in found_class.body:
+        if isinstance(node, AnnAssign):
+            # assert isinstance(node.col_offset, int)
+            body_indentation = node.col_offset
+
+            for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                lines_to_remove_set.add(line_no)
+            continue
+
+    # Filter the source lines
+    retained_source = [line for idx, line in enumerate(source_lines, start=1) if idx not in lines_to_remove_set]
+
+    # Make a replacement
+    replacement_body = compute_expected_source_dataclass(new_variables, indent=body_indentation)
+
+    insert_point = min(lines_to_remove_set)
+    new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+    return new_source
+
+
+def handle_dataclass(
+    original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print"] | Literal["diff"] | Literal["write"]
+) -> bool:
+    """Handle printing or updating the dataclass file. Return true if changes were needed."""
+
+    source_filename = inspect.getsourcefile(original_class)
+    if not source_filename:
+        raise FileNotFoundError(f"Cannot locate file for {original_class=}")
+    existing_source = Path(source_filename).read_text()
+
+    new_source = replace_dataclass_in_source_file(existing_source, original_class.__name__, variables)
+
+    ensure_compiles(new_source)
+
+    has_differences = new_source != existing_source
+    if mode == "write":
+        Path(source_filename).write_text(new_source)
+        return has_differences
+
+    if mode == "print":
+        # always print, even if nothing changed
+        print(new_source)
+        return has_differences
+
+    if mode == "diff":
+        u = unified_diff(
+            existing_source.splitlines(), new_source.splitlines(), fromfile=f"old/{source_filename}", tofile=f"new/{source_filename}", lineterm=""
+        )
+        for d in u:
+            print(d)
+        return has_differences
+
+    raise Never()
+
+
+def replace_strenum_in_source_file(existing_source: str, existing_class_name: str, new_variables: dict[str, VariableMetadata]) -> str:
+    """There's a pile of something's in the middle of the class body. Remove them. Keep everything on each side."""
+
+    tree = ast.parse(existing_source)
+    body_indentation: int = 4  # default, let it be over-ridden if there's other contents
+    found_class: ClassDef | None = None
+
+    for node in tree.body:
+        if isinstance(node, ClassDef) and node.name == existing_class_name:
+            found_class = node
+            break
+    else:
+        raise SyntaxError("Didn't find a ClassDef at all!.")
+
+    source_lines = existing_source.splitlines()
+    lines_to_remove_set: set[int] = set()
+
+    # Make a list of all lines comprising the assignments at the class body.
+    for node in found_class.body:
+        if isinstance(node, Assign):
+            body_indentation = node.col_offset
+
+            for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                lines_to_remove_set.add(line_no)
+            continue
+
+    # Filter the source lines
+    retained_source = [line for idx, line in enumerate(source_lines, start=1) if idx not in lines_to_remove_set]
+
+    # Make a replacement
+    replacement_body = compute_expected_source_enum(new_variables, indent=body_indentation)
+
+    insert_point = min(lines_to_remove_set)
+    new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+    return new_source
+
+
+def handle_strenum(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print"] | Literal["diff"] | Literal["write"]) -> bool:
+    """Handle printing or updating the strenum file. Return true if changes were needed."""
+
+    source_filename = inspect.getsourcefile(original_class)
+    if not source_filename:
+        raise FileNotFoundError(f"Cannot locate file for {original_class=}")
+    existing_source = Path(source_filename).read_text()
+
+    new_source = replace_strenum_in_source_file(existing_source, original_class.__name__, variables)
+
+    ensure_compiles(new_source)
+
+    has_differences = new_source != existing_source
+    if mode == "write":
+        Path(source_filename).write_text(new_source)
+        return has_differences
+
+    if mode == "print":
+        # always print, even if nothing changed
+        print(new_source)
+        return has_differences
+
+    if mode == "diff":
+        u = unified_diff(
+            existing_source.splitlines(), new_source.splitlines(), fromfile=f"old/{source_filename}", tofile=f"new/{source_filename}", lineterm=""
+        )
+        for d in u:
+            print(d)
+        return has_differences
+
+    raise Never()
+
+
+class What(StrEnum):
+    dataclass = "dataclass"
+    enum = "enum"
+
+
+class Mode(StrEnum):
+    print = "print"
+    diff = "diff"
+    write = "write"
 
 
 def main() -> int:
     """Inspect GithubEnvironmentVariables."""
-    p = argparse.ArgumentParser()
+
+    p = argparse.ArgumentParser(epilog="Exits with 0 if up-to-date, 1 if changes needed.")
+    p.add_argument("mode", nargs="?", choices=Mode, default=Mode.diff, help="Output mode. Default '%(default)s'")
+    p.add_argument("--what", nargs="+", choices=What, default=None, help="What datastructure to update. Default all.")
     p.add_argument("--cache")
 
     a = p.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     markdown = None
     if a.cache:
         markdown = Path(a.cache).read_text()
 
     if not markdown:
-        p.error("Need markdown source.")
+        p.error(f"Need markdown source. Download {variable_url!r} and pass file to --cache")
 
     variables: dict[str, VariableMetadata] = parse_markdown(markdown)
 
-    x, y = extract_keepsake_from_existing_code(as_dataclass.GithubEnvironmentVariables)
+    changes = False
 
-    new_dataclass_source = x + compute_expected_source_dataclass(variables) + y
-    # ensure_compiles(new_dataclass_source)
-    print(new_dataclass_source)
+    if a.what is None:
+        a.what = list(What)
 
-    # diff_source(as_dataclass.GithubEnvironmentVariables, new_dataclass_source)
-    return 0
+    if What.dataclass in a.what:
+        changes |= handle_dataclass(as_dataclass.GithubEnvironmentVariables, variables, mode=a.mode)
+    if What.enum in a.what:
+        changes |= handle_strenum(Name, variables, mode=a.mode)
+
+    return 1 if changes else 0
 
 
 def ensure_compiles(generated: str, context: int = 60):
