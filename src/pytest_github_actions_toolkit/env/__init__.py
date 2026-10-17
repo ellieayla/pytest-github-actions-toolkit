@@ -1,10 +1,10 @@
 from enum import StrEnum
 
 
-class GithubEnvironmentVariableNames(StrEnum):
+class Name(StrEnum):
     """
     Names of standard github environment variables from https://docs.github.com/en/actions/reference/workflows-and-actions/variables.
-    Matches keys of GithubEnvironmentVariables and fields of .
+    Matches keys of GithubEnvironmentVariables.
     """
 
     CI = "CI"
