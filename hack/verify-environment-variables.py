@@ -1,5 +1,6 @@
 """
-Code generation. Produce a dataclass and a StrEnum based on environment variables names and example values in documentation.
+Code generator. Produce a dataclass and a StrEnum based on environment variables names and example values in documentation.
+Can either
 """
 
 import argparse
@@ -16,6 +17,7 @@ from itertools import chain
 from pathlib import Path
 from textwrap import wrap
 from typing import Literal, Never
+from urllib.request import urlopen
 
 from pytest_github_actions_toolkit.env import Name, as_dataclass
 from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo
@@ -57,7 +59,7 @@ type VariableMetadata = tuple[str, str, type]
 
 
 def parse_desc_col(column: str) -> VariableMetadata:
-    """extract description and example from column."""
+    """Extract an example from the big textual description. Refine the remaining description text."""
 
     remaining = strip_links(column.strip())
 
@@ -75,7 +77,7 @@ def parse_desc_col(column: str) -> VariableMetadata:
 
     elif m := POSSIBLE_VALUES.search(remaining):
         example = m.group(1)
-        # don't remove from sentence
+        # don't remove from sentence, because there's probably several and they should stay together.
 
     elif m := TRUE_IF.search(remaining):
         example = "true"
@@ -107,11 +109,13 @@ def parse_desc_col(column: str) -> VariableMetadata:
     else:
         t = str
 
-    if t in (Path, Directory) and not example:
-        example = f"{PREFIX_FOR_UNSPECIFIED_PATH}/example.txt"
-
     if not example:
-        raise ValueError(f"No example extracted from {description=}")
+        if t is Path:
+            example = f"{PREFIX_FOR_UNSPECIFIED_PATH}/example.txt"
+        elif t is Directory:
+            example = f"{PREFIX_FOR_UNSPECIFIED_PATH}/example/"
+        else:
+            raise ValueError(f"No example extracted from {description=}")
 
     return description, example, t
 
@@ -181,10 +185,6 @@ def parse_markdown(source: str) -> dict[str, VariableMetadata]:
     return d
 
 
-def field_to_source(field_name: str, annotation: str):
-    return f"{field_name}: {annotation}"
-
-
 def compute_expected_source_enum(v: dict[str, VariableMetadata], indent: int) -> str:
     """Compute what the source of env.Name should look like, given v."""
     expected: list[str] = [
@@ -203,9 +203,7 @@ def indented(src: Iterable[str], indent: int) -> list[str]:
 
 def annotated_arg(desc: str, typ: type, indent: int) -> list[str]:
     """Construct lines of an Annotated[] attribute list. Caller is responsible for joining and indenting them."""
-
     description = "\n".join(repr_long_strings(desc, indent))
-
     return [f"{typ.__name__} | None,", *f"{Description.__name__}({description}),".splitlines()]
 
 
@@ -254,8 +252,11 @@ def class_attribute(name: str, meta: VariableMetadata, indent: int) -> list[str]
 
 
 def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: int) -> str:
-    """Compute what the source of GithubEnvironmentVariables should look like, given v.
-    Indent it to match the parent class body."""
+    """
+    Compute the body of the GithubEnvironmentVariables class, given a mapping of variables.
+    Add a blank line before and after the block of source.
+    Indent new lines to match the parent class body.
+    """
 
     expected: list[str] = [
         "",
@@ -267,10 +268,20 @@ def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: in
 
 
 def double_quote_repr(value: str) -> str:
-    """Produce a repr of a string wrapped in doublequotes.
-    Works by creating a repr with '\0 (singlequote+nul) in it, tricking cpython into using doublequotes.
-    Then strip off the extra characters from the rendered repr.
-    Ref https://mail.python.org/pipermail/python-list/2003-April/221393.html"""
+    """
+    Produce a repr of a string wrapped in double-quotes.
+
+    When cpython makes a repr of a string containing only single-quotes,
+    it wraps the produced string in double-quotes.
+    When making that quoting decision, cpython scans the string only until it finds \0.
+
+    That looks like "'\x00value" - it has unwanted leading characters.
+
+    Remove the first 6 characters and then attach a " back on.
+
+    Ref https://mail.python.org/pipermail/python-list/2003-April/221393.html
+    """
+    assert len(repr("'\0''")) - len(repr("'")) == 6  # noqa: S101
     return '"' + repr("'\0" + value)[6:]
 
 
@@ -486,22 +497,35 @@ class Mode(StrEnum):
 
 
 def main() -> int:
-    """Inspect GithubEnvironmentVariables."""
+    """Inspect GithubEnvironmentVariables for differences with upstream documentation."""
 
-    p = argparse.ArgumentParser(epilog="Exits with 0 if up-to-date, 1 if changes needed.")
+    p = argparse.ArgumentParser(
+        epilog="Exits with 0 if up-to-date, 1 if changes needed.",
+        description=__doc__,
+    )
     p.add_argument("mode", nargs="?", choices=Mode, default=Mode.diff, help="Output mode. Default '%(default)s'")
     p.add_argument("--what", action="append", choices=What, default=None, help="What datastructure to update. Default all.")
-    p.add_argument("--cache")
 
+    # title=f"Markdown documentation, eg {variable_url!r}"
+    doc = p.add_argument_group(title="Markdown documentation to extract a list of environment variables from.")
+    reference_group = doc.add_mutually_exclusive_group(required=True)
+    reference_group.add_argument("--file", type=Path, help="File containing documentation retrieved earlier (eg with curl or git).")
+    reference_group.add_argument("--url", nargs="?", type=str, help="Url to fetch, (default %(default)r)", default=variable_url)
     a = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
-    markdown = None
-    if a.cache:
-        markdown = Path(a.cache).read_text()
 
-    if not markdown:
-        p.error(f"Need markdown source. Download {variable_url!r} and pass file to --cache")
+    markdown: str
+    if a.file:
+        markdown = a.file.read_text()
+
+    else:
+        if not a.url:
+            a.url = variable_url
+
+        logger.info(f"Fetching {a.url!r}")
+        with urlopen(a.url) as f:  # noqa: S310 [https://github.com/astral-sh/ruff/issues/7918]
+            markdown = f.read().decode("utf-8")
 
     variables: dict[str, VariableMetadata] = parse_markdown(markdown)
 
