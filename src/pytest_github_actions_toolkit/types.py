@@ -45,20 +45,3 @@ class Description:
 
     def __repr__(self) -> str:
         return f"Description({self.description!r})"
-
-
-@dataclass
-class Example:
-    example: str
-
-    def __repr__(self) -> str:
-        return f"Example({self.example!r})"
-
-    def __str__(self) -> str:
-        return self.example
-
-
-class _MISSING_TYPE: ...
-
-
-_MISSING = _MISSING_TYPE()

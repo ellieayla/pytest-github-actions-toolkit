@@ -326,11 +326,6 @@ def repr_long_strings(src: str, indent: int) -> list[str]:
     return sorted(candidates, key=lambda x: x[0]).pop()[1]  # idx=1 is the body, idx=0 is the score
 
 
-def print_source_pretty(source: str, start: int = 1) -> None:
-    for idx, row in enumerate(source.splitlines(), start=start):
-        print(f"{idx:>5} | {row}")
-
-
 def replace_dataclass_in_source_file(existing_source: str, existing_class_name: str, new_variables: dict[str, VariableMetadata]) -> str:
     """There's a pile of AnnAssign's in the middle of the class body. Remove them. Keep everything on each side."""
 
@@ -372,9 +367,7 @@ def replace_dataclass_in_source_file(existing_source: str, existing_class_name: 
     return new_source
 
 
-def handle_dataclass(
-    original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print"] | Literal["diff"] | Literal["write"]
-) -> bool:
+def handle_dataclass(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print", "diff", "write"]) -> bool:
     """Handle printing or updating the dataclass file. Return true if changes were needed."""
 
     source_filename = inspect.getsourcefile(original_class)
@@ -448,7 +441,7 @@ def replace_strenum_in_source_file(existing_source: str, existing_class_name: st
     return new_source
 
 
-def handle_strenum(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print"] | Literal["diff"] | Literal["write"]) -> bool:
+def handle_strenum(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print", "diff", "write"]) -> bool:
     """Handle printing or updating the strenum file. Return true if changes were needed."""
 
     source_filename = inspect.getsourcefile(original_class)

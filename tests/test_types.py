@@ -1,6 +1,6 @@
 import pytest
 
-from pytest_github_actions_toolkit.types import Actor, Description, Example, OwnerRepo, OwnerRepoUnparsableError
+from pytest_github_actions_toolkit.types import Actor, Description, OwnerRepo, OwnerRepoUnparsableError
 
 
 def test_actor() -> None:
@@ -28,10 +28,3 @@ def test_description() -> None:
     assert d.description == "dddd"
 
     assert "dddd" in repr(d)
-
-
-def test_example() -> None:
-    e = Example("eeee")
-    assert e.example == "eeee"
-
-    assert "eeee" in repr(e)

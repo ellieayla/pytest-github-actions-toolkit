@@ -95,7 +95,7 @@ def write_bytes(at: Path, b: bytes) -> None:
     at.write_bytes(b)
 
 
-def write_raw_git_repo_fixture(into: Path) -> None:
+def write_raw_git_repo(into: Path) -> None:
     """
     Directly write pre-baked bytes into files to create a bare git repo.
     This is faster than launching a git subprocess.

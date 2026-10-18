@@ -1,13 +1,17 @@
 import logging
+import os
 import subprocess
 from collections.abc import Generator, ItemsView, Iterator, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from itertools import product
 from pathlib import Path
 from typing import Self
 
 import pytest
+
+from .git_raw import write_raw_git_repo
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +25,18 @@ def override_home(to: Path) -> Generator[None]:
 
 
 def find_git_binary() -> Path:
-    for possibility in ["/usr/bin/git"]:
-        location = Path(possibility)
+    search_path = os.get_exec_path()
+    for possibile_dir, possible_file in product(search_path, ("git", "git.exe")):
+        location = Path(possibile_dir) / possible_file
         if location.exists() and location.is_file():
-            return location
-    raise FileNotFoundError("No git found.")
+            try:
+                version = subprocess.check_output([location, "--version"], text=True)  # noqa: S603
+                logger.info(f"Using {location}: {version.strip()}")
+                return location
+            except subprocess.SubprocessError:
+                continue
+
+    raise FileNotFoundError(f"No git found in {search_path!r}")
 
 
 @dataclass
@@ -70,8 +81,24 @@ class GitConfig(MutableMapping[str, str]):
         return ItemsView(dict([kv(row) for row in ret.splitlines()]))
 
 
+class Commit(str):
+    """Value type for a 40-character commit hash."""
+
+    def __new__(cls, object: object) -> Self:
+        value = str(object).lower()
+        if len(value) != 40:
+            raise ValueError(f"Expected 40-character commit hash (not {value!r} len ({len(value)}))")
+        return super().__new__(cls, value)
+
+
 @dataclass
 class GitRepo:
+    """
+    A simple wrapper for interacting with a repository using a git executable.
+
+    For anything more complex, consider https://gitpython.readthedocs.io/ instead.
+    """
+
     root: Path
     command: GitCommand = field(default_factory=GitCommand)
 
@@ -93,6 +120,13 @@ class GitRepo:
 
     def git(self, args: Sequence[str], env: Mapping[str, str] | None = None) -> str:
         return self.command.run(args, cwd=self.root, env=env)
+
+    def refs(self) -> Mapping[str, Commit]:
+        def _parse_line(row: str):
+            ref, _nul, sha = row.partition("\0")
+            return ref, Commit(sha)
+
+        return dict(_parse_line(row) for row in self.git(["for-each-ref", r"--format=%(refname)%00%(objectname)"]).splitlines())
 
     def add_remote(self, source: str, name: str = "origin") -> None:
         self.git(["remote", "add", name, "--", source])
@@ -239,3 +273,21 @@ class CheckoutFixture:
         log1 = repo.git(["log", "-1", "--format=%H"]).strip()
 
         return log1
+
+
+@pytest.fixture
+def checkout_repository(github_workspace_directory: Path) -> CheckoutFixture:
+    return CheckoutFixture(github_workspace_directory)
+
+
+@pytest.fixture
+def sample_remote_repo(tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> GitRepo:
+    """A git repository in a local temp directory which can be cloned and pushed to.
+    Contains one commit (d7c2169cd2af356a325633261afe5cc6237059a5)."""
+
+    bare_repo = tmp_path_factory.mktemp("__remote_repo-")
+
+    write_raw_git_repo(bare_repo)
+
+    repo = GitRepo(bare_repo)
+    return repo

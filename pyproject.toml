@@ -87,7 +87,10 @@ max-doc-length = 300  # really long comments are OK
 
 # Testing
 [tool.pytest.ini_options]
-pytester_example_dir = "tests/examples"
+pytester_example_dir = "examples"
+addopts = [
+    "--import-mode=importlib",
+]
 filterwarnings = [
     "error",  # by default convert warnings into exceptions
 ]
@@ -102,7 +105,7 @@ omit = [
 show_missing = true  # show lines missing coverage
 skip_covered = true  # don't show files in the report at 100%
 skip_empty = true  # skip empty files, like __init__.py
-fail_under = 80
+fail_under = 81.0
 exclude_also = [
     "if __name__ == .__main__.:",
     "pytest.fail",

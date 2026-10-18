@@ -3,7 +3,7 @@ from textwrap import dedent
 
 import pytest
 
-from pytest_github_actions_toolkit.output import OutputFile, parse_file_command
+from pytest_github_actions_toolkit.output import OutputFile, parse_command_file
 
 INVALID_FILES = [
     # Heredoc with posix assignment not supported by github actions
@@ -142,7 +142,7 @@ VALID_FILES = {
 )
 def test_ensure_invalid_content_produces_error(content: str) -> None:
     with pytest.raises(ValueError):
-        parse_file_command(content)
+        parse_command_file(content)
 
 
 @pytest.mark.parametrize(
@@ -151,12 +151,29 @@ def test_ensure_invalid_content_produces_error(content: str) -> None:
     ids=repr,
 )
 def test_valid_content(tmp_path: Path, content: str, expected: dict[str, str]) -> None:
-    assert parse_file_command(content) == expected
+    assert parse_command_file(content) == expected
 
     location = tmp_path / "f.txt"
     location.write_text(content)
 
     o = OutputFile(location)
 
-    assert o.content() == str(o) == content
-    assert o.as_dict() == o == expected
+    assert o.read_text() == content
+    assert o.as_dict() == expected
+
+
+@pytest.mark.parametrize(
+    ("content"),
+    (
+        *VALID_FILES.keys(),
+        *INVALID_FILES,
+    ),
+    ids=repr,
+)
+def test_any_content_repr(tmp_path: Path, content: str) -> None:
+    location = tmp_path / "f.txt"
+    location.write_text(content)
+
+    o = OutputFile(location)
+
+    print(repr(o))

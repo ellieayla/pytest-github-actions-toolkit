@@ -1,6 +1,9 @@
 from pathlib import Path
 from string import ascii_lowercase
 
+import pytest
+
+from pytest_github_actions_toolkit.dir_stat import StatusList, changes, tree_recording
 from pytest_github_actions_toolkit.tree import tree
 
 
@@ -27,7 +30,7 @@ def test_tree_only_directories(tmp_path: Path) -> None:
 
     d = letter_directories()
     (root / d).mkdir(parents=True)
-    (root / d / "e-file").touch()
+    (root / "a/b/c/e-file").touch()
 
     assert list(tree(root, limit_to_directories=True)) == [
         "└── a",
@@ -36,3 +39,48 @@ def test_tree_only_directories(tmp_path: Path) -> None:
         "            └── d",
         "4 directories",
     ]
+
+
+def test_tree_recording_compare(tmp_path: Path) -> None:
+    """Make a directory tree, record its contents, make a change, record again, diff the recordings."""
+    root = tmp_path / "empty"
+
+    d = letter_directories()
+    (root / d).mkdir(parents=True)
+
+    a = tree_recording(root)
+
+    (root / d.parent / "foo").write_text("foo")
+
+    b = tree_recording(root)
+
+    status = StatusList(a.compare(b))
+
+    matcher = pytest.LineMatcher(sorted(repr(status).splitlines()))
+
+    matcher.fnmatch_lines(
+        [
+            "added:     a/b/c/foo",
+            "modified:  a/b/c *st_nlink*",
+        ]
+    )
+
+
+def test_changes_contextmanager(tmp_path: Path) -> None:
+    """Make a directory tree, make a change inside context manager, diff the recordings."""
+    root = tmp_path / "empty"
+
+    d = letter_directories()
+    (root / d).mkdir(parents=True)
+
+    with changes(root) as status:
+        (root / d.parent / "foo").write_text("foo")
+
+    matcher = pytest.LineMatcher(sorted(repr(status).splitlines()))
+
+    matcher.fnmatch_lines(
+        [
+            "added:     a/b/c/foo",
+            "modified:  a/b/c *st_nlink*",
+        ]
+    )
