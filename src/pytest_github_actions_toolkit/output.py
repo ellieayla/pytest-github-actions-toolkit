@@ -136,11 +136,18 @@ def parse_command_file(content: str) -> Mapping[str, str]:
     return result
 
 
-def numbered_file_contents(source: str, *, start: int = 1, around: int | None = None, context: int = 4) -> list[str]:
+def numbered_file_contents(source: str, *, start: int = 1, around: int | tuple[int, int] | None = None, context: int = 4) -> list[str]:
     ret: list[str] = []
     if around is None:
         for idx, row in enumerate(source.splitlines(), start=start):
             ret.append(f"{idx:>5} | {row}")
+
+    elif isinstance(around, tuple):
+        around_start, around_end = around
+        for idx, row in enumerate(source.splitlines(), start=start):
+            if around_start - context < idx < around_end + context:
+                mark = ">" if around_start <= idx <= around_end else "|"
+                ret.append(f"{idx:>5} {mark} {row}")
 
     else:
         for idx, row in enumerate(source.splitlines(), start=start):
