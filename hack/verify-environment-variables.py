@@ -185,15 +185,13 @@ def parse_markdown(source: str) -> dict[str, VariableMetadata]:
     return d
 
 
-def compute_expected_source_enum(v: dict[str, VariableMetadata], indent: int) -> str:
-    """Compute what the source of env.Name should look like, given v."""
-    expected: list[str] = [
-        "",
-        *indented([f"{field_name} = {double_quote_repr(field_name)}" for field_name in v], indent),
-        "",
-    ]
+def compute_expected_source_enum(v: dict[str, VariableMetadata], indent: int) -> list[str]:
+    """
+    Compute what the body of the env.Name class should look like, given v.
 
-    return "\n".join(expected)
+    It's a list of name = "expression" lines, all indented.
+    """
+    return indented([f"{field_name} = {double_quote_repr(field_name)}" for field_name in v], indent)
 
 
 def indented(src: Iterable[str], indent: int) -> list[str]:
@@ -251,20 +249,12 @@ def class_attribute(name: str, meta: VariableMetadata, indent: int) -> list[str]
     ]
 
 
-def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: int) -> str:
+def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: int) -> list[str]:
     """
     Compute the body of the GithubEnvironmentVariables class, given a mapping of variables.
-    Add a blank line before and after the block of source.
-    Indent new lines to match the parent class body.
     """
 
-    expected: list[str] = [
-        "",
-        *indented(chain.from_iterable(class_attribute(field_name, metadata, indent) for field_name, metadata in v.items()), indent),
-        "",
-    ]
-
-    return "\n".join(expected)
+    return indented(chain.from_iterable(class_attribute(field_name, metadata, indent) for field_name, metadata in v.items()), indent)
 
 
 def double_quote_repr(value: str) -> str:
@@ -368,10 +358,10 @@ def replace_dataclass_in_source_file(existing_source: str, existing_class_name: 
     retained_source = [line for idx, line in enumerate(source_lines, start=1) if idx not in lines_to_remove_set]
 
     # Make a replacement
-    replacement_body = compute_expected_source_dataclass(new_variables, indent=body_indentation)
+    replacement_body: list[str] = compute_expected_source_dataclass(new_variables, indent=body_indentation)
 
     insert_point = min(lines_to_remove_set)
-    new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+    new_source = "\n".join(retained_source[: insert_point - 1] + replacement_body + retained_source[insert_point - 1 :])
 
     if not new_source.endswith("\n"):
         new_source += "\n"
@@ -444,7 +434,7 @@ def replace_strenum_in_source_file(existing_source: str, existing_class_name: st
     replacement_body = compute_expected_source_enum(new_variables, indent=body_indentation)
 
     insert_point = min(lines_to_remove_set)
-    new_source = "\n".join(retained_source[: insert_point - 1]) + replacement_body + "\n".join(retained_source[insert_point - 1 :])
+    new_source = "\n".join(retained_source[: insert_point - 1] + replacement_body + retained_source[insert_point - 1 :])
 
     if not new_source.endswith("\n"):
         new_source += "\n"
