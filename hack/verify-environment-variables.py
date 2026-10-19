@@ -1,6 +1,6 @@
 """
 Code generator. Produce a dataclass and a StrEnum based on environment variables names and example values in documentation.
-Can either
+Can print new classes to stdout, print a diff vs existing source, or overwrite source files with replacements.
 """
 
 import argparse
@@ -9,6 +9,7 @@ import inspect
 import logging
 import re
 import sys
+from abc import abstractmethod
 from ast import AnnAssign, Assign, ClassDef
 from collections.abc import Iterable
 from difflib import unified_diff
@@ -19,14 +20,21 @@ from textwrap import wrap
 from typing import Literal, Never
 from urllib.request import urlopen
 
+# Hardcoded support for specific functionality in pytest_github_actions_toolkit
 from pytest_github_actions_toolkit.env import Name, as_dataclass
+from pytest_github_actions_toolkit.output import numbered_file_contents
 from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo
 from pytest_github_actions_toolkit.util import truthy_value
+
+logger = logging.getLogger(__name__)
+
+type VariableMetadata = tuple[str, str, type]
+type Variables = dict[str, VariableMetadata]
 
 variable_url = "https://docs.github.com/api/article/body?pathname=/en/actions/reference/workflows-and-actions/variables"
 
 
-logger = logging.getLogger(__name__)
+### Parse Markdown (rudimentary)
 
 
 def extract_name_from_first_column(content: str):
@@ -54,8 +62,6 @@ HAS_THE_VALUE = re.compile(r", and always has the value of `(.+?)`")
 POSSIBLE_VALUES = re.compile(r"values are:? `(.+?)`")
 TRUE_IF = re.compile(r"`true` if ")
 BR = "<br>"
-
-type VariableMetadata = tuple[str, str, type]
 
 
 def parse_desc_col(column: str) -> VariableMetadata:
@@ -185,13 +191,7 @@ def parse_markdown(source: str) -> dict[str, VariableMetadata]:
     return d
 
 
-def compute_expected_source_enum(v: dict[str, VariableMetadata], indent: int) -> list[str]:
-    """
-    Compute what the body of the env.Name class should look like, given v.
-
-    It's a list of name = "expression" lines, all indented.
-    """
-    return indented([f"{field_name} = {double_quote_repr(field_name)}" for field_name in v], indent)
+#### Make new source
 
 
 def indented(src: Iterable[str], indent: int) -> list[str]:
@@ -249,14 +249,6 @@ def class_attribute(name: str, meta: VariableMetadata, indent: int) -> list[str]
     ]
 
 
-def compute_expected_source_dataclass(v: dict[str, VariableMetadata], indent: int) -> list[str]:
-    """
-    Compute the body of the GithubEnvironmentVariables class, given a mapping of variables.
-    """
-
-    return indented(chain.from_iterable(class_attribute(field_name, metadata, indent) for field_name, metadata in v.items()), indent)
-
-
 def double_quote_repr(value: str) -> str:
     """
     Produce a repr of a string wrapped in double-quotes.
@@ -280,9 +272,9 @@ def repr_long_string_candidate(src: str, width: int, indent: int) -> list[str]:
     lines = wrap(src, drop_whitespace=False, width=100)
 
     return [
-        "",
+        "",  # insert a newline at the end of the first line, where caller has put an opening brace
         *indented(map(double_quote_repr, lines), indent=indent),
-        "",
+        "",  # let the caller finish the last line, probably with a closing brace
     ]
 
 
@@ -305,8 +297,9 @@ def repr_long_strings(src: str, indent: int) -> list[str]:
     Caller is responsible for splicing it in with correct indentation.
     """
 
-    DESIRED_WIDTH = 150
-    extra_chars_if_one_line = (" " * indent * 2) + "Description()" + "),"
+    # XXX: Hardcoded hack. We only use this for a Description right now, at a known indentation, with a configured ruff line-length
+    DESIRED_WIDTH = 150  # ruff line-length
+    extra_chars_if_one_line = (" " * indent * 2) + Description.__name__ + "(" + "),"
     extra_chars_if_two_line = " " * indent * 3
 
     candidates: list[tuple[float | int, list[str]]] = []
@@ -327,111 +320,86 @@ def repr_long_strings(src: str, indent: int) -> list[str]:
     return sorted(candidates, key=lambda x: x[0]).pop()[1]  # idx=1 is the body, idx=0 is the score
 
 
-def replace_dataclass_in_source_file(existing_source: str, existing_class_name: str, new_variables: dict[str, VariableMetadata]) -> str:
-    """There's a pile of AnnAssign's in the middle of the class body. Remove them. Keep everything on each side."""
-
-    tree = ast.parse(existing_source)
-    body_indentation: int = 4  # default, let it be over-ridden if there's other contents
-    found_class: ClassDef | None = None
-
-    for node in tree.body:
-        if isinstance(node, ClassDef) and node.name == existing_class_name:
-            found_class = node
-            break
-    else:
-        raise SyntaxError("Didn't find a ClassDef at all!.")
-
-    source_lines = existing_source.splitlines()
-    lines_to_remove_set: set[int] = set()
-
-    # Make a list of all lines comprising the Annotated assignment at the class body.
-    for node in found_class.body:
-        if isinstance(node, AnnAssign):
-            # assert isinstance(node.col_offset, int)
-            body_indentation = node.col_offset
-
-            for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
-                lines_to_remove_set.add(line_no)
-            continue
-
-    # Filter the source lines
-    retained_source = [line for idx, line in enumerate(source_lines, start=1) if idx not in lines_to_remove_set]
-
-    # Make a replacement
-    replacement_body: list[str] = compute_expected_source_dataclass(new_variables, indent=body_indentation)
-
-    insert_point = min(lines_to_remove_set)
-    new_source = "\n".join(retained_source[: insert_point - 1] + replacement_body + retained_source[insert_point - 1 :])
-
-    if not new_source.endswith("\n"):
-        new_source += "\n"
-    return new_source
-
-
-def handle_dataclass(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print", "diff", "write"]) -> bool:
-    """Handle printing or updating the dataclass file. Return true if changes were needed."""
-
-    source_filename = inspect.getsourcefile(original_class)
-    if not source_filename:
-        raise FileNotFoundError(f"Cannot locate file for {original_class=}")
-    existing_source = Path(source_filename).read_text()
-
-    new_source = replace_dataclass_in_source_file(existing_source, original_class.__name__, variables)
-
-    ensure_compiles(new_source)
-
-    has_differences = new_source != existing_source
-    if mode == "write":
-        Path(source_filename).write_text(new_source)
-        return has_differences
-
-    if mode == "print":
-        # always print, even if nothing changed
-        print(new_source)
-        return has_differences
-
-    if mode == "diff":
-        u = unified_diff(
-            existing_source.splitlines(), new_source.splitlines(), fromfile=f"old/{source_filename}", tofile=f"new/{source_filename}", lineterm=""
-        )
-        for d in u:
-            print(d)
-        return has_differences
-
-    raise Never()
-
-
-def replace_strenum_in_source_file(existing_source: str, existing_class_name: str, new_variables: dict[str, VariableMetadata]) -> str:
+class BodyReplacer[T]:
     """There's a pile of something's in the middle of the class body. Remove them. Keep everything on each side."""
 
-    tree = ast.parse(existing_source)
-    body_indentation: int = 4  # default, let it be over-ridden if there's other contents
-    found_class: ClassDef | None = None
+    data: T
 
-    for node in tree.body:
-        if isinstance(node, ClassDef) and node.name == existing_class_name:
-            found_class = node
+    def __init__(self, data: T) -> None:
+        self.data = data
+
+    @abstractmethod
+    def mark_for_removal(self, class_definition: ClassDef) -> set[int]:
+        """Decide which parts of the AST to remove, by line number. Subclass must return a set[node.lineno]"""
+        ...
+
+    @abstractmethod
+    def make_replacement(self, indent: int) -> list[str]:
+        """Construct replacement for the body, replacing the removed parts. Subclass must return a list of strings."""
+        ...
+
+
+class ReplaceNames(BodyReplacer[Variables]):
+    def mark_for_removal(self, class_definition: ClassDef) -> set[int]:
+        ret: set[int] = set()
+        for node in class_definition.body:
+            if isinstance(node, Assign):
+                # add lines from start to end of this node.
+                for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                    ret.add(line_no)
+
+        return ret
+
+    def make_replacement(self, indent: int) -> list[str]:
+        return indented([f"{field_name} = {double_quote_repr(field_name)}" for field_name in self.data], indent)
+
+
+class ReplaceDataclass(BodyReplacer[Variables]):
+    def mark_for_removal(self, class_definition: ClassDef) -> set[int]:
+        ret: set[int] = set()
+        for node in class_definition.body:
+            if isinstance(node, AnnAssign):
+                for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                    ret.add(line_no)
+        return ret
+
+    def make_replacement(self, indent: int) -> list[str]:
+        return indented(chain.from_iterable(class_attribute(field_name, metadata, indent) for field_name, metadata in self.data.items()), indent)
+
+
+class ClassNotFoundError(ValueError): ...
+
+
+def replace_body_of[T](
+    existing_source: str,
+    existing_class_name: str,
+    using: BodyReplacer[T],
+    body_indentation: int = 4,  # default,
+):
+    """
+    Using a subclass of BodyReplacer, find pieces of some module-level class to remove and make new ones.
+    If some class is not found at the module-level, raises a ClassNotFoundError.
+    """
+    tree = ast.parse(existing_source)
+
+    for found_class in tree.body:  # TODO: This is module-level right now. Should we search deeper?
+        if isinstance(found_class, ClassDef) and found_class.name == existing_class_name:
             break
     else:
-        raise SyntaxError("Didn't find a ClassDef at all!.")
+        raise ClassNotFoundError(existing_class_name)
+
+    for node in found_class.body:
+        body_indentation = node.col_offset  # update assumption based on class' real indentation
+        break
 
     source_lines = existing_source.splitlines()
-    lines_to_remove_set: set[int] = set()
-
-    # Make a list of all lines comprising the assignments at the class body.
-    for node in found_class.body:
-        if isinstance(node, Assign):
-            body_indentation = node.col_offset
-
-            for line_no in range(node.lineno, (node.end_lineno or node.lineno) + 1):
-                lines_to_remove_set.add(line_no)
-            continue
+    lines_to_remove_set = using.mark_for_removal(found_class)
 
     # Filter the source lines
     retained_source = [line for idx, line in enumerate(source_lines, start=1) if idx not in lines_to_remove_set]
 
     # Make a replacement
-    replacement_body = compute_expected_source_enum(new_variables, indent=body_indentation)
+    replacement_body = using.make_replacement(indent=body_indentation)
 
     insert_point = min(lines_to_remove_set)
     new_source = "\n".join(retained_source[: insert_point - 1] + replacement_body + retained_source[insert_point - 1 :])
@@ -442,37 +410,49 @@ def replace_strenum_in_source_file(existing_source: str, existing_class_name: st
     return new_source
 
 
-def handle_strenum(original_class: type, variables: dict[str, VariableMetadata], mode: Literal["print", "diff", "write"]) -> bool:
-    """Handle printing or updating the strenum file. Return true if changes were needed."""
+def handle_resource[T](
+    original_class: type,
+    mode: Literal["print", "diff", "write"],
+    using: BodyReplacer[T],
+) -> bool:
+    """Handle printing or updating a source file. Return true if changes were needed."""
 
+    # Find the file which provides the original_class source.
     source_filename = inspect.getsourcefile(original_class)
     if not source_filename:
         raise FileNotFoundError(f"Cannot locate file for {original_class=}")
     existing_source = Path(source_filename).read_text()
 
-    new_source = replace_strenum_in_source_file(existing_source, original_class.__name__, variables)
+    # Rip the class apart and put together a replacement
+    new_source = replace_body_of(
+        existing_source=existing_source,
+        existing_class_name=original_class.__name__,
+        using=using,
+    )
 
     ensure_compiles(new_source)
 
-    has_differences = new_source != existing_source
+    has_differences: bool = new_source != existing_source
+
     if mode == "write":
         Path(source_filename).write_text(new_source)
-        return has_differences
+        logger.info(f"Wrote {source_filename!r}")
 
-    if mode == "print":
+    elif mode == "print":
         # always print, even if nothing changed
         print(new_source)
-        return has_differences
 
-    if mode == "diff":
+    elif mode == "diff":
         u = unified_diff(
             existing_source.splitlines(), new_source.splitlines(), fromfile=f"old/{source_filename}", tofile=f"new/{source_filename}", lineterm=""
         )
         for d in u:
             print(d)
-        return has_differences
 
-    raise Never()
+    else:
+        raise Never()
+
+    return has_differences
 
 
 class What(StrEnum):
@@ -487,7 +467,7 @@ class Mode(StrEnum):
 
 
 def main() -> int:
-    """Inspect GithubEnvironmentVariables for differences with upstream documentation."""
+    """Inspect classes GithubEnvironmentVariables and Name for differences with upstream documentation."""
 
     p = argparse.ArgumentParser(
         epilog="Exits with 0 if up-to-date, 1 if changes needed.",
@@ -503,7 +483,7 @@ def main() -> int:
     reference_group.add_argument("--url", nargs="?", type=str, help="Url to fetch, (default %(default)r)", default=variable_url)
     a = p.parse_args()
 
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stderr)
 
     markdown: str
     if a.file:
@@ -525,21 +505,26 @@ def main() -> int:
         a.what = list(What)
 
     if What.dataclass in a.what:
-        changes |= handle_dataclass(as_dataclass.GithubEnvironmentVariables, variables, mode=a.mode)
+        changes |= handle_resource(as_dataclass.GithubEnvironmentVariables, mode=a.mode, using=ReplaceDataclass(variables))
     if What.enum in a.what:
-        changes |= handle_strenum(Name, variables, mode=a.mode)
+        changes |= handle_resource(Name, mode=a.mode, using=ReplaceNames(variables))
+
+    if not changes:
+        logger.info("OK")
 
     return 1 if changes else 0
 
 
-def ensure_compiles(generated: str, context: int = 60):
+def ensure_compiles(generated: str):
+    """Try to compile the generated source. If it fails, print the source around the erroneous lines."""
     try:
         _produced_source = compile(source=generated, filename="<string>", mode="exec")
     except SyntaxError as e:
-        source = generated.splitlines()
         if e.lineno:
-            for line, body in enumerate(source[e.lineno - context : e.lineno + context], start=e.lineno - context):
-                print(f"{line:>4} | {body}")
+            start = e.lineno
+            end = e.end_lineno or e.lineno
+            print("\n".join(numbered_file_contents(generated, around=(start, end), context=6)))
+
         raise
 
 
