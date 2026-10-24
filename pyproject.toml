@@ -81,6 +81,15 @@ max-doc-length = 300  # really long comments are OK
     "PIE790",  # allow unnecessary ... in tests
     "F841",  # allow unnecessary variable assignment in tests?
 ]
+"examples/**/test_*.py" = [
+    # "E501",  # allow long lines
+    "INP001",  # standalone test files, intentionally not part of a package
+    "T201",  # allow print() in tests
+    "D",  # turn off docstring requirements on testcases
+    "S101",  # allow use of assert in tests
+    "PIE790",  # allow unnecessary ... in tests
+    "F841",  # allow unnecessary variable assignment in tests?
+]
 "hack/*.py" = [
     "INP001",  # hack/ is not a namespace package, it's utilities.
 ]
