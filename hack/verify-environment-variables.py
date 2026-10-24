@@ -518,7 +518,7 @@ def main() -> int:
 def ensure_compiles(generated: str):
     """Try to compile the generated source. If it fails, print the source around the erroneous lines."""
     try:
-        _produced_source = compile(source=generated, filename="<string>", mode="exec")
+        _produced_source = compile(source=generated, filename="<generated-string>", mode="exec")
     except SyntaxError as e:
         if e.lineno:
             start = e.lineno
