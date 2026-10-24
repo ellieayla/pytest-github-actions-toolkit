@@ -5,8 +5,7 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any, Self
 
-from ..types import Description, Directory, OwnerRepo
-from ..util import truthy_value
+from ..types import Description, Directory, OwnerRepo, truthy_value
 
 
 class Metadata(StrEnum):

@@ -23,8 +23,7 @@ from urllib.request import urlopen
 # Hardcoded support for specific functionality in pytest_github_actions_toolkit
 from pytest_github_actions_toolkit.env import Name, as_dataclass
 from pytest_github_actions_toolkit.output import numbered_file_contents
-from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo
-from pytest_github_actions_toolkit.util import truthy_value
+from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo, truthy_value
 
 logger = logging.getLogger(__name__)
 
