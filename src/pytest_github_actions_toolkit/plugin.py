@@ -90,25 +90,25 @@ def create_github_resource_paths(github_resource_paths: Mapping[Name, Path | Dir
 
 
 @contextmanager
-def monkeypatch_envs(monkeypatch: pytest.MonkeyPatch, envs: Mapping[str, str]) -> Generator[None]:
+def monkeypatch_envs(monkeypatch: pytest.MonkeyPatch, envs: Mapping[Name, str]) -> Generator[Mapping[str, str]]:
     with monkeypatch.context():
         for name, value in envs.items():
             monkeypatch.setenv(name, value)
-        yield
+        yield dict(envs.items())
 
 
 @pytest.fixture
 def pull_request_triggered_workflow(
     create_github_resource_paths: Mapping[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> Generator[Mapping[str, str]]:
-    with monkeypatch_envs(monkeypatch, samples.pull_request):
-        yield samples.pull_request
+    with monkeypatch_envs(monkeypatch, samples.pull_request) as d:
+        yield d
 
 
 @pytest.fixture
 def push_triggered_workflow(create_github_resource_paths: Mapping[str, Path], monkeypatch: pytest.MonkeyPatch) -> Generator[Mapping[str, str]]:
-    with monkeypatch_envs(monkeypatch, samples.push):
-        yield samples.push
+    with monkeypatch_envs(monkeypatch, samples.push) as d:
+        yield d
 
 
 class WorkflowTriggerFixture:
@@ -131,8 +131,8 @@ class WorkflowTriggerFixture:
             "pull_request": samples.pull_request,
         }[sample]
         with self._monkeypatch.context() as context:
-            with monkeypatch_envs(context, preset_envs):
-                yield preset_envs
+            with monkeypatch_envs(context, preset_envs) as d:
+                yield d
 
 
 @pytest.fixture

@@ -24,13 +24,13 @@ def print_output_content_finalizer(node: pytest.Item, output_file: OutputFile) -
     node.add_report_section("teardown", f"{output_file.path} contents at", output_file.read_text())
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=True, scope="function")
 def register_print_output_content(
     github_work_directory: Path, github_resource_paths: Mapping[Name, Path | Directory], request: pytest.FixtureRequest
 ) -> Generator[None]:
     for_files: list[Name] = []
 
-    node: pytest.Item = cast(pytest.Item, request.node)
+    node: pytest.Function = cast(pytest.Function, getattr(request, "node"))  # note matches scope on this fixture
     mark: pytest.Mark | None = node.get_closest_marker("print_output_content")
 
     # The test function is marked.
@@ -57,7 +57,7 @@ def register_print_output_content(
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None, Result[pytest.TestReport]]:
+def pytest_runtest_makereport(item: pytest.Function, call: pytest.CallInfo[None]) -> Generator[None, Result[pytest.TestReport]]:
     """Communicate content of output files / directories to the failure report for 'print_output_content' marked tests."""
     outcome: Result[pytest.TestReport] = yield
 
@@ -71,14 +71,15 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     if funcargs is None:
         return  # doesn't make sense
 
-    workflow_paths: Mapping[Name, Directory | Path] | None = funcargs.get(_CREATED_WORKFLOW_ENVIRONMENT_PATHS_FIXTURE_NAME, None)
+    workflow_paths = cast(Mapping[Name, Directory | Path], funcargs.get(_CREATED_WORKFLOW_ENVIRONMENT_PATHS_FIXTURE_NAME, {}))
     if not workflow_paths:
         warnings.warn(
             f"Test marked with @pytest.mark.{_PRINT_OUTPUT_CONTENT_MARKER_NAME} doesn't use {_CREATED_WORKFLOW_ENVIRONMENT_PATHS_FIXTURE_NAME}. Remove the mark or add the fixture."
         )
         return
 
-    hide_path_prefix: Path = funcargs.get("github_work_directory", Path("/"))
+    hide_path_prefix: Path = cast(Path, funcargs.get("github_work_directory", Path("/")))
+
     # Test is marked, uses the fixture, has paths generated, and finished running.
 
     # What paths should be reported?
