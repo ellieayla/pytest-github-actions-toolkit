@@ -122,7 +122,7 @@ class GitRepo:
         return self.command.run(args, cwd=self.root, env=env)
 
     def refs(self) -> Mapping[str, Commit]:
-        def _parse_line(row: str):
+        def _parse_line(row: str) -> tuple[str, Commit]:
             ref, _nul, sha = row.partition("\0")
             return ref, Commit(sha)
 
