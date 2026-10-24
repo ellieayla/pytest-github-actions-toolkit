@@ -88,6 +88,7 @@ def pytest_runtest_makereport(item: pytest.Function, call: pytest.CallInfo[None]
     else:
         requested = workflow_paths
 
+    # Add a pytest report section for each output Path
     for name, location in requested.items():
         try:
             pretty_path = location.relative_to(hide_path_prefix.parent)
@@ -97,6 +98,7 @@ def pytest_runtest_makereport(item: pytest.Function, call: pytest.CallInfo[None]
         if isinstance(location, Directory):
             if directory_listing := "\n".join(tree(location, include_summary=False)):
                 report.sections.append((f"Content of directory ${name} = {pretty_path!r}", directory_listing))
+
         else:
             if captured := OutputFile(location):
                 report.sections.append(
