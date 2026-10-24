@@ -2,8 +2,7 @@
 
 from typing import Final
 
-from .env import Name
-from .env.as_dataclass import GithubEnvironmentVariables
+from .env import GithubEnvironmentVariables, Name
 
 example_fields = {Name(k): v for k, v in GithubEnvironmentVariables.examples().items() if v is not None}
 

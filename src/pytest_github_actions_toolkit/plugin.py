@@ -8,8 +8,7 @@ from uuid import uuid4
 import pytest
 
 from . import samples
-from .env import Name
-from .env.as_dataclass import GithubEnvironmentVariables, Metadata
+from .env import GithubEnvironmentVariables, Metadata, Name
 from .git_checkout import CheckoutFixture, GitRepo, checkout_repository, sample_remote_repo
 from .git_raw import write_raw_git_repo
 from .mark import pytest_configure, pytest_runtest_makereport, register_print_output_content

@@ -21,7 +21,7 @@ from typing import Literal, Never
 from urllib.request import urlopen
 
 # Hardcoded support for specific functionality in pytest_github_actions_toolkit
-from pytest_github_actions_toolkit.env import Name, as_dataclass
+from pytest_github_actions_toolkit.env import GithubEnvironmentVariables, Metadata, Name
 from pytest_github_actions_toolkit.output import numbered_file_contents
 from pytest_github_actions_toolkit.types import Description, Directory, OwnerRepo, truthy_value
 
@@ -206,13 +206,12 @@ def annotated_arg(desc: str, typ: type, indent: int) -> list[str]:
 
 def field_arg(constructor: str, example: str, indent: int):
     """Construct lines of a field() constructor's arguments. Caller is responsible for joining and indenting them."""
-    MetadataKeysEnum = as_dataclass.Metadata
 
     if len(example) > 110:
         raise ValueError(f"Unexpectedly long example. Need to consider wrapping it like Description (len={len(example)}): {example!r}")
     field_metadata_lines = [
-        f"{MetadataKeysEnum.__name__}.{MetadataKeysEnum.example.name}: {double_quote_repr(example)},",
-        f"{MetadataKeysEnum.__name__}.{MetadataKeysEnum.validate_as.name}: {constructor},",
+        f"{Metadata.__name__}.{Metadata.example.name}: {double_quote_repr(example)},",
+        f"{Metadata.__name__}.{Metadata.validate_as.name}: {constructor},",
     ]
 
     return [
@@ -504,7 +503,7 @@ def main() -> int:
         a.what = list(What)
 
     if What.dataclass in a.what:
-        changes |= handle_resource(as_dataclass.GithubEnvironmentVariables, mode=a.mode, using=ReplaceDataclass(variables))
+        changes |= handle_resource(GithubEnvironmentVariables, mode=a.mode, using=ReplaceDataclass(variables))
     if What.enum in a.what:
         changes |= handle_resource(Name, mode=a.mode, using=ReplaceNames(variables))
 

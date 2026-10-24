@@ -1,8 +1,7 @@
 from dataclasses import fields
 from pathlib import Path
 
-from pytest_github_actions_toolkit.env import Name
-from pytest_github_actions_toolkit.env.as_dataclass import GithubEnvironmentVariables
+from pytest_github_actions_toolkit.env import GithubEnvironmentVariables, Name
 
 
 def test_dataclass_and_enum_match() -> None:
