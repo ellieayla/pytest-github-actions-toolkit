@@ -3,7 +3,7 @@ from string import ascii_lowercase
 
 import pytest
 
-from pytest_github_actions_toolkit.dir_stat import StatusList, changes, tree_recording
+from pytest_github_actions_toolkit.dir_stat import StatusList, TreeRecording, changes
 from pytest_github_actions_toolkit.tree import tree
 
 
@@ -48,11 +48,11 @@ def test_tree_recording_compare(tmp_path: Path) -> None:
     d = letter_directories()
     (root / d).mkdir(parents=True)
 
-    a = tree_recording(root)
+    a = TreeRecording(root)
 
     (root / d.parent / "foo").write_text("foo")
 
-    b = tree_recording(root)
+    b = TreeRecording(root)
 
     status = StatusList(a.compare(b))
 

@@ -46,7 +46,7 @@ class StatusList(list[PathStatus]):
 
 
 @dataclass
-class tree_recording:
+class TreeRecording:
     """Record stat() for each item in a directory tree, so it can be compared against another recording later."""
 
     path: Path
@@ -85,12 +85,12 @@ class tree_recording:
 @contextmanager
 def changes(path: Path) -> Generator[StatusList]:
     """Record a directory tree twice, producing a list of changes made during the context manager."""
-    a = tree_recording(path)
+    a = TreeRecording(path)
     status = StatusList()
 
     try:
         yield status
 
     finally:
-        b = tree_recording(path)
+        b = TreeRecording(path)
         status.extend(a.compare(b))
