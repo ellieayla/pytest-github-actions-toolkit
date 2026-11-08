@@ -170,10 +170,10 @@ def test_valid_content(tmp_path: Path, content: str, expected: dict[str, str]) -
     ),
     ids=repr,
 )
-def test_any_content_repr(tmp_path: Path, content: str) -> None:
+def test_any_output_file_can_have_a_repr_generated(tmp_path: Path, content: str) -> None:
     location = tmp_path / "f.txt"
     location.write_text(content)
 
     o = OutputFile(location)
 
-    print(repr(o))
+    assert "f.txt:" in repr(o)

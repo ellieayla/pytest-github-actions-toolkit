@@ -93,7 +93,7 @@ def parse_command_file(content: str) -> Mapping[str, str]:
     value2
     EOF
 
-    If duplicate items are found, last wins.
+    If duplicate keys are present in the file, last wins.
     """
     iterator = iter(content.splitlines())
 

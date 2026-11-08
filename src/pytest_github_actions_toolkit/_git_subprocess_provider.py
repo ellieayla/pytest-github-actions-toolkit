@@ -1,3 +1,8 @@
+"""
+A crude wrapper around the the 'git' cli.
+One of GitPython/gix/pygit2/dulwich could be used instead.
+"""
+
 import logging
 import os
 import subprocess
@@ -7,13 +12,21 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from typing import Self
+from typing import Protocol, Self
 
 import pytest
 
-from .git_raw import write_raw_git_repo
-
 logger = logging.getLogger(__name__)
+
+
+class GitRepo(Protocol):
+    """Anything that behaves vaguely like a git repository class."""
+
+    def __init__(self, root: Path): ...
+    @classmethod
+    def init(cls, root: Path) -> Self: ...
+    def add_remote(self, source: str, name: str = "origin") -> None: ...
+    def git(self, args: Sequence[str], env: Mapping[str, str] | None = None) -> str: ...
 
 
 @contextmanager
@@ -25,6 +38,7 @@ def override_home(to: Path) -> Generator[None]:
 
 
 def find_git_binary() -> Path:
+    """Locate the git binary on the OS search path (PATH)."""
     search_path = os.get_exec_path()
     for possibile_dir, possible_file in product(search_path, ("git", "git.exe")):
         location = Path(possibile_dir) / possible_file
@@ -41,7 +55,13 @@ def find_git_binary() -> Path:
 
 @dataclass
 class GitCommand:
+    """Where the git binary is, and executing things with it."""
+
     git_bin: Path = field(default_factory=find_git_binary)
+
+    def __post_init__(self) -> None:
+        if not self.git_bin.exists():
+            raise FileNotFoundError(self.git_bin)
 
     def run(self, command: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None) -> str:
         logger.info(f"GitCommand: {command}")
@@ -50,6 +70,8 @@ class GitCommand:
 
 @dataclass
 class GitConfig(MutableMapping[str, str]):
+    """Modeling of a .git/config file."""
+
     root: Path
     command: GitCommand
 
@@ -64,9 +86,6 @@ class GitConfig(MutableMapping[str, str]):
 
     def __iter__(self) -> Iterator[str]:
         yield from self.keys()
-        # for key, _item in self.items():
-        #    self.keys()
-        #    yield key
 
     def __len__(self) -> int:
         return len(self.items())
@@ -92,11 +111,15 @@ class Commit(str):
 
 
 @dataclass
-class GitRepo:
+class GitSubprocessRepo(GitRepo):
     """
     A simple wrapper for interacting with a repository using a git executable.
 
-    For anything more complex, consider https://gitpython.readthedocs.io/ instead.
+    For anything more complex, consider one of these instead:
+
+    * https://gitpython.readthedocs.io/
+    * https://dulwich.readthedocs.io/
+    * https://github.com/GitoxideLabs/GixPython/
     """
 
     root: Path
@@ -152,142 +175,3 @@ class GitRepo:
         self.git(["worktree", "add", "-B", branch, "--", str(path)])
         yield self.__class__(path, command=self.command)
         self.git(["worktree", "remove", "--", str(path)])
-
-
-def get_checkout_info(ref: str = "", commit: str = "") -> tuple[str, str | None]:
-    if not ref and not commit:
-        raise ValueError("ref and commit cannot both be empty.")
-
-    result_ref = None
-    start_point = None
-
-    upper_ref = ref.upper()
-
-    if not ref:  # SHA only
-        result_ref = commit
-
-    elif upper_ref.startswith("REFS/HEADS/"):
-        branch = ref[len("REFS/HEADS/") :]
-        result_ref = branch
-        start_point = f"refs/remotes/origin/{branch}"
-
-    elif upper_ref.startswith("REFS/PULL/"):
-        branch = ref[len("REFS/PULL/") :]
-        result_ref = f"refs/remotes/pull/{branch}"
-
-    elif upper_ref.startswith("REFS/TAGS/"):
-        result_ref = ref
-
-    elif upper_ref.startswith("REFS/"):
-        result_ref = commit if commit else ref
-
-    else:  # unqualified ref
-        raise ValueError(f"Unqualified ref {ref=}, use refs/heads/{ref} or refs/tags/{ref} instead.")
-
-    return (result_ref, start_point)
-
-
-def get_refspec(ref: str, commit: str, fetch_tags: bool = False) -> list[str]:
-    if not ref and not commit:
-        raise ValueError("ref and commit cannot both be empty.")
-
-    result: list[str] = []
-    upper_ref = ref.upper()
-
-    if fetch_tags:
-        result.append("+refs/tags/*:refs/tags/*")
-
-    if commit:
-        if upper_ref.startswith("REFS/HEADS/"):
-            branch = ref[len("REFS/HEADS/") :]
-            result.append(f"+{commit}:refs/remotes/origin/{branch}")
-        elif upper_ref.startswith("REFS/PULL/"):
-            branch = ref[len("REFS/PULL/") :]
-            result.append(f"+{commit}:refs/remotes/pull/${branch}")
-
-        elif upper_ref.startswith("REFS/TAGS/"):
-            if not fetch_tags:
-                result.append(f"+{ref}:{ref}")
-
-        else:  # no destination ref
-            result.append(commit)
-
-    elif not upper_ref.startswith("REFS/"):  # unqualified ref
-        result.append(f"+refs/heads/{ref}*:refs/remotes/origin/{ref}*")
-        if not fetch_tags:
-            result.append(f"+refs/tags/{ref}*:refs/tags/{ref}*")
-
-    elif upper_ref.startswith("REFS/HEADS/"):
-        branch = ref[len("REFS/HEADS/") :]
-        result.append(f"+{ref}:refs/remotes/origin/{branch}")
-
-    elif upper_ref.startswith("REFS/PULL/"):
-        branch = ref[len("REFS/PULL/") :]
-        result.append(f"+{ref}:refs/remotes/pull/${branch}")
-
-    elif upper_ref.startswith("REFS/TAGS/"):
-        if not fetch_tags:
-            result.append(f"+{ref}:{ref}")
-    else:
-        result.append(f"+{ref}:{ref}")
-
-    return result
-
-
-@dataclass
-class CheckoutFixture:
-    """Behaves similar to a simplified action/checkout"""
-
-    root: Path
-    depth: int | None = 1
-    default_branch: str = "main"
-    fetch_tags: bool = False
-
-    def __call__(self, source: Path | str, ref: str | None = None, commit: str = "") -> str:
-        ref = ref or f"refs/heads/{self.default_branch}"
-
-        repo = GitRepo.init(self.root)
-        repo.add_remote(str(source))
-
-        refspec = get_refspec(ref, commit, self.fetch_tags)
-
-        fetch_args = ["-c", "protocol.version=2", "fetch", "--no-tags", "--prune", "--no-recurse-submodules"]
-        if self.depth is not None:
-            fetch_args.append(f"--depth={self.depth}")
-        fetch_args.append("origin")
-
-        print(" ".join(fetch_args))
-        print(" ".join(refspec))
-        repo.git([*fetch_args, *refspec])
-
-        checkout_ref, checkout_start_point = get_checkout_info(ref, commit or "")
-        checkout_args = ["checkout", "--progress", "--force"]
-
-        if checkout_start_point:
-            checkout_args.extend(["-B", checkout_ref, checkout_start_point])
-        else:
-            checkout_args.append(checkout_ref)
-
-        repo.git([*checkout_args])
-
-        log1 = repo.git(["log", "-1", "--format=%H"]).strip()
-
-        return log1
-
-
-@pytest.fixture
-def checkout_repository(github_workspace_directory: Path) -> CheckoutFixture:
-    return CheckoutFixture(github_workspace_directory)
-
-
-@pytest.fixture
-def sample_remote_repo(tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> GitRepo:
-    """A git repository in a local temp directory which can be cloned and pushed to.
-    Contains one commit (d7c2169cd2af356a325633261afe5cc6237059a5)."""
-
-    bare_repo = tmp_path_factory.mktemp("__remote_repo-")
-
-    write_raw_git_repo(bare_repo)
-
-    repo = GitRepo(bare_repo)
-    return repo

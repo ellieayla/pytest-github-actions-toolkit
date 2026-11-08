@@ -11,7 +11,7 @@ from pytest_github_actions_toolkit.types import Description, Directory, OwnerRep
 class Name(StrEnum):
     """
     Names of standard github environment variables from https://docs.github.com/en/actions/reference/workflows-and-actions/variables.
-    Matches keys of GithubEnvironmentVariables.
+    Matches keys of the GithubEnvironmentVariables dataclass.
     """
 
     CI = "CI"

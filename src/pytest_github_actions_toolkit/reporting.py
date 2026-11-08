@@ -10,7 +10,7 @@ from .tree import tree
 
 @contextmanager
 def report_directory_changes(request: pytest.FixtureRequest, location: Path, name: str | None = None) -> Generator[Path]:
-    """Report the directory content changes during the context manager, as a diff of asciiart.."""
+    """Report the directory content changes during the context manager, as a diff of asciiart."""
     directory_asciiart_before = list(tree(location, include_summary=True))
 
     yield location

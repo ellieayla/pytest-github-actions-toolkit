@@ -15,6 +15,9 @@ where = ["src"]
 
 [project.entry-points.pytest11]
 pytest_github_actions_toolkit = "pytest_github_actions_toolkit.plugin"
+pytest_github_actions_toolkit_action_checkout = "pytest_github_actions_toolkit.action_checkout_fixture"
+pytest_github_actions_toolkit_remote = "pytest_github_actions_toolkit.remote"
+pytest_github_actions_toolkit_mark = "pytest_github_actions_toolkit.mark"
 
 
 # Linting
@@ -114,7 +117,7 @@ omit = [
 show_missing = true  # show lines missing coverage
 skip_covered = true  # don't show files in the report at 100%
 skip_empty = true  # skip empty files, like __init__.py
-fail_under = 81.0
+fail_under = 82.0
 exclude_also = [
     "if __name__ == .__main__.:",
     "pytest.fail",
